@@ -1,4 +1,5 @@
 use clap::Parser;
+use log::LevelFilter;
 use proxy::Mode;
 use tokio::net::TcpListener;
 
@@ -10,7 +11,13 @@ mod proxy;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    pretty_env_logger::init_timed();
+    if std::env::var("RUST_LOG").is_err() {
+        pretty_env_logger::formatted_builder()
+            .filter_level(LevelFilter::Info)
+            .init();
+    } else {
+        pretty_env_logger::init()
+    }
 
     let cli = cli::Cli::parse();
 
