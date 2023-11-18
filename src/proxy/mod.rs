@@ -20,7 +20,7 @@ pub enum Mode {
     Trace,
 }
 
-impl Service<Request<Incoming>> for Proxy {
+impl Service<Request<Incoming>> for &Proxy {
     type Response = Response<BoxBody<Bytes, hyper::Error>>;
 
     type Error = hyper::Error;
@@ -47,11 +47,9 @@ impl Service<Request<Incoming>> for Proxy {
 
         if self.mode == Mode::Trace {
             log::info!("[{} {} {} {}]", host, port, req.method(), req.uri().path());
-            log::info!("headers: {:?}", req.headers());
-
-            log::info!("{}:{}", host, port);
         }
 
+        let mode = self.mode;
         Box::pin(async move {
             let stream = TcpStream::connect(format!("{host}:{port}")).await.unwrap();
             let io = TokioIo::new(stream);
@@ -71,6 +69,10 @@ impl Service<Request<Incoming>> for Proxy {
             *req.uri_mut() = builder.build().unwrap();
 
             let resp = sender.send_request(req).await?;
+
+            if mode == Mode::Trace {
+                log::info!("[{} {} {}]", host, port, resp.status());
+            }
 
             Ok(resp.map(|b| b.boxed()))
         })
