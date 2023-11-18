@@ -19,12 +19,6 @@ pub enum Rule {
 
 impl Proxy {
     fn find_target<'a>(&'a self, name: &str) -> Option<&'a Target> {
-        for t in &self.targets {
-            if t.hostname == name {
-                return Some(t);
-            }
-        }
-
-        None
+        self.targets.iter().find(|t| t.hostname == name)
     }
 }
