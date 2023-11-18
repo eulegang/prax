@@ -1,13 +1,16 @@
+use std::sync::Arc;
+
 use clap::Parser;
 use log::LevelFilter;
-use proxy::{Mode, Proxy};
+use proxy::Proxy;
+use tokio::sync::RwLock;
 
 mod cli;
+mod config;
 mod listen;
 mod proxy;
 
-#[tokio::main]
-async fn main() -> eyre::Result<()> {
+fn main() -> eyre::Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         pretty_env_logger::formatted_builder()
             .filter_level(LevelFilter::Info)
@@ -18,19 +21,21 @@ async fn main() -> eyre::Result<()> {
 
     let cli = cli::Cli::parse();
 
+    let rt = Arc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(8)
+            .thread_name("atkpx")
+            .enable_all()
+            .build()?,
+    );
+
+    let proxy = Arc::new(RwLock::new(Proxy::default()));
+
     if let Some(path) = cli.configure {
-        let lua = mlua::Lua::new();
+        config::config(path, rt.clone(), proxy.clone())?
+    };
 
-        let content = tokio::fs::read_to_string(path).await?;
-
-        let chunk = lua.load(content).set_name("atkpx-config");
-
-        chunk.exec_async().await?;
-    }
-
-    let mode = if cli.trace { Mode::Trace } else { Mode::Pass };
-
-    listen::listen(cli.listen, Proxy { mode }.into()).await?;
+    rt.block_on(async { listen::listen(cli.listen, proxy).await })?;
 
     Ok(())
 }

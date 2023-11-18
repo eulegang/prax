@@ -2,11 +2,11 @@ use std::{net::SocketAddr, sync::Arc};
 
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
-use tokio::{io, net::TcpListener};
+use tokio::{io, net::TcpListener, sync::RwLock};
 
 use crate::proxy::Proxy;
 
-pub async fn listen(addr: SocketAddr, proxy: Arc<Proxy>) -> Result<(), io::Error> {
+pub async fn listen(addr: SocketAddr, proxy: Arc<RwLock<Proxy>>) -> Result<(), io::Error> {
     // We create a TcpListener and bind it to 127.0.0.1:3000
     let listener = TcpListener::bind(addr).await?;
 
@@ -21,10 +21,12 @@ pub async fn listen(addr: SocketAddr, proxy: Arc<Proxy>) -> Result<(), io::Error
 
         // Spawn a tokio task to serve multiple connections concurrently
         tokio::task::spawn(async move {
+            let proxy = proxy.as_ref().read().await;
+
             // Finally, we bind the incoming connection to our `hello` service
             if let Err(err) = http1::Builder::new()
                 // `service_fn` converts our function in a `Service`
-                .serve_connection(io, proxy.as_ref())
+                .serve_connection(io, &*proxy)
                 .await
             {
                 println!("Error serving connection: {:?}", err);
