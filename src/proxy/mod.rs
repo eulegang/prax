@@ -1,5 +1,3 @@
-use hyper::{body::Incoming, Request, Response};
-
 mod service;
 
 #[derive(Default, Debug)]
@@ -29,6 +27,7 @@ pub enum Elem {
 pub enum Rule {
     SetHeader(String, String),
     Log(Elem),
+    Dump,
 }
 
 impl Proxy {

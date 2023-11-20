@@ -16,6 +16,7 @@ pub enum Elem {
 pub enum Rule {
     SetHeader(String, String),
     Log(Elem),
+    Dump,
 }
 
 impl From<Rule> for PRule {
@@ -23,6 +24,7 @@ impl From<Rule> for PRule {
         match value {
             Rule::SetHeader(k, v) => PRule::SetHeader(k, v),
             Rule::Log(elem) => PRule::Log(PElem::from(elem)),
+            Rule::Dump => PRule::Dump,
         }
     }
 }

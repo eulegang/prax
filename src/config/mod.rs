@@ -29,6 +29,7 @@ pub fn config(path: PathBuf) -> eyre::Result<()> {
     globals.set("body", lua.create_userdata(Elem::Body)?)?;
     globals.set("status", lua.create_userdata(Elem::Status)?)?;
     globals.set("method", lua.create_userdata(Elem::Method)?)?;
+    globals.set("dump", lua.create_userdata(Rule::Dump)?)?;
     globals.set("header", lua.create_async_function(globals::header)?)?;
     globals.set("query", lua.create_async_function(globals::query)?)?;
 
