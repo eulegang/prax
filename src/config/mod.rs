@@ -1,46 +1,36 @@
-use std::{path::PathBuf, sync::Arc};
-
 use mlua::Lua;
-use tokio::{runtime::Runtime, sync::RwLock};
+use std::path::PathBuf;
 
-use crate::proxy::{Proxy, Target};
+mod err;
+mod globals;
+mod rule;
+mod target_ref;
 
-pub fn config(path: PathBuf, rt: Arc<Runtime>, proxy: Arc<RwLock<Proxy>>) -> eyre::Result<()> {
+pub use err::ConfError;
+pub use rule::{Elem, Rule};
+pub use target_ref::TargetRef;
+
+pub fn config(path: PathBuf) -> eyre::Result<()> {
     let content = std::fs::read_to_string(path)?;
 
     let lua = Lua::new();
-    let proxy = proxy.clone();
-
     let globals = lua.globals();
 
-    let target_proxy = proxy.clone();
-    let xrt = rt.clone();
-    let target = lua.create_function_mut(move |_, (hostname,): (String,)| {
-        xrt.block_on(async {
-            let mut proxy = target_proxy.write().await;
+    globals.set("target", lua.create_async_function(globals::target)?)?;
+    globals.set("focus", lua.create_async_function(globals::focus)?)?;
 
-            log::info!("Targeting {}", &hostname);
-            proxy.targets.push(Target {
-                hostname,
-                rules: vec![],
-            });
+    globals.set(
+        "set_header",
+        lua.create_async_function(globals::set_header)?,
+    )?;
+    globals.set("log", lua.create_async_function(globals::log)?)?;
 
-            Ok(())
-        })
-    })?;
-
-    let focus_proxy = proxy.clone();
-
-    let focus = lua.create_function_mut(move |_, (): ()| {
-        rt.block_on(async {
-            let mut p = focus_proxy.write().await;
-            p.focus = true;
-            Ok(())
-        })
-    })?;
-
-    globals.set("target", target)?;
-    globals.set("focus", focus)?;
+    globals.set("path", lua.create_userdata(Elem::Path)?)?;
+    globals.set("body", lua.create_userdata(Elem::Body)?)?;
+    globals.set("status", lua.create_userdata(Elem::Status)?)?;
+    globals.set("method", lua.create_userdata(Elem::Method)?)?;
+    globals.set("header", lua.create_async_function(globals::header)?)?;
+    globals.set("query", lua.create_async_function(globals::query)?)?;
 
     let chunk = lua.load(content).set_name("atkpx-config");
 

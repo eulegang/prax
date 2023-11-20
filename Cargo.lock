@@ -86,6 +86,7 @@ dependencies = [
  "hyper-util",
  "log",
  "mlua",
+ "once_cell",
  "pretty_env_logger",
  "tokio",
 ]

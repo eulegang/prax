@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 use std::sync::Arc;
 
 use clap::Parser;
@@ -10,7 +11,10 @@ mod config;
 mod listen;
 mod proxy;
 
-fn main() -> eyre::Result<()> {
+static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
+
+#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
+async fn main() -> eyre::Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         pretty_env_logger::formatted_builder()
             .filter_level(LevelFilter::Info)
@@ -21,21 +25,16 @@ fn main() -> eyre::Result<()> {
 
     let cli = cli::Cli::parse();
 
-    let rt = Arc::new(
-        tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(8)
-            .thread_name("atkpx")
-            .enable_all()
-            .build()?,
-    );
-
-    let proxy = Arc::new(RwLock::new(Proxy::default()));
-
     if let Some(path) = cli.configure {
-        config::config(path, rt.clone(), proxy.clone())?
+        config::config(path)?
     };
 
-    rt.block_on(async { listen::listen(cli.listen, proxy).await })?;
+    {
+        let proxy = PROXY.read().await;
+        eprintln!("Config: {:#?}", proxy);
+    }
+
+    listen::listen(cli.listen).await?;
 
     Ok(())
 }

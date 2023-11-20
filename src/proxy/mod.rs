@@ -1,3 +1,5 @@
+use hyper::{body::Incoming, Request, Response};
+
 mod service;
 
 #[derive(Default, Debug)]
@@ -9,12 +11,24 @@ pub struct Proxy {
 #[derive(Debug)]
 pub struct Target {
     pub hostname: String,
-    pub rules: Vec<Rule>,
+    pub req: Vec<Rule>,
+    pub resp: Vec<Rule>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub enum Elem {
+    Path,
+    Body,
+    Status,
+    Method,
+    Header(String),
+    Query(String),
+}
+
+#[derive(Debug, Clone)]
 pub enum Rule {
     SetHeader(String, String),
+    Log(Elem),
 }
 
 impl Proxy {

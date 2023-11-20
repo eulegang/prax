@@ -1,19 +1,19 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use http_body_util::combinators::BoxBody;
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::client::conn::http1::Builder;
 use hyper::service::Service;
 use hyper::{Request, Response, Uri};
 use hyper_util::rt::TokioIo;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
-use super::Proxy;
+use super::{Elem, Proxy, Rule};
 
 impl Service<Request<Incoming>> for &Proxy {
-    type Response = Response<BoxBody<Bytes, hyper::Error>>;
+    type Response = Response<Full<Bytes>>;
 
     type Error = hyper::Error;
 
@@ -22,14 +22,9 @@ impl Service<Request<Incoming>> for &Proxy {
     fn call(&self, mut req: Request<Incoming>) -> Self::Future {
         let Some(host) = req.uri().host() else {
             return Box::pin(async {
-                let body = "Bad Request"
-                    .to_string()
-                    .boxed()
-                    .map_err(|_| todo!())
-                    .boxed();
+                let body = "Bad Request".as_bytes().into();
 
                 let builder = Response::builder().status(400).body(body).unwrap();
-
                 Ok(builder)
             });
         };
@@ -43,6 +38,13 @@ impl Service<Request<Incoming>> for &Proxy {
 
         if log {
             log::info!("[{} {} {} {}]", host, port, req.method(), req.uri().path());
+        }
+
+        let mut resp_rules = None;
+        if let Some(target) = target {
+            apply_request(&mut req, &target.req);
+
+            resp_rules = Some(target.resp.clone());
         }
 
         Box::pin(async move {
@@ -63,13 +65,85 @@ impl Service<Request<Incoming>> for &Proxy {
 
             *req.uri_mut() = builder.build().unwrap();
 
+            let mut buf = Vec::with_capacity(0x2000);
             let resp = sender.send_request(req).await?;
+            let (parts, mut body) = resp.into_parts();
+
+            // Stream the body, writing each frame to stdout as it arrives
+            while let Some(next) = body.frame().await {
+                let frame = next?;
+                if let Some(chunk) = frame.data_ref() {
+                    let _ = buf.write(&chunk).await;
+                }
+            }
+
+            let mut resp = Response::from_parts(parts, buf);
 
             if log {
                 log::info!("[{} {} {}]", host, port, resp.status());
             }
 
-            Ok(resp.map(|b| b.boxed()))
+            if let Some(rules) = resp_rules {
+                apply_response(&mut resp, &rules);
+            }
+
+            Ok(resp.map(|b| b.into()))
         })
+    }
+}
+
+fn apply_request(req: &mut Request<Incoming>, rules: &[Rule]) {
+    for rule in rules {
+        match rule {
+            Rule::SetHeader(_, _) => (),
+            Rule::Log(Elem::Path) => log::info!("Path: {}", req.uri().path()),
+            Rule::Log(Elem::Method) => log::info!("Method: {}", req.method()),
+            Rule::Log(Elem::Header(h)) => {
+                if let Some(value) = req.headers().get(h) {
+                    log::info!("Header ({}): {}", h, value.to_str().unwrap_or("not string"));
+                } else {
+                    log::info!("Header ({}): (none)", h);
+                }
+            }
+            Rule::Log(Elem::Query(q)) => {
+                if let Some(qa) = req.uri().query() {
+                    log::info!("todo query! {qa}");
+                } else {
+                    log::info!("Query ({}): (none)", q)
+                }
+            }
+
+            Rule::Log(Elem::Body) => (),
+            Rule::Log(Elem::Status) => (),
+        }
+    }
+}
+
+fn apply_response(resp: &mut Response<Vec<u8>>, rules: &[Rule]) {
+    for rule in rules {
+        match rule {
+            Rule::SetHeader(_, _) => (),
+            Rule::Log(Elem::Path) => (),
+            Rule::Log(Elem::Method) => (),
+            Rule::Log(Elem::Query(_)) => (),
+
+            Rule::Log(Elem::Header(h)) => {
+                if let Some(value) = resp.headers().get(h) {
+                    log::info!("Header ({}): {}", h, value.to_str().unwrap_or("not string"));
+                } else {
+                    log::info!("Header ({}): (none)", h);
+                }
+            }
+            Rule::Log(Elem::Status) => {
+                log::info!("Status: {}", resp.status())
+            }
+            Rule::Log(Elem::Body) => {
+                if let Ok(content) = std::str::from_utf8(resp.body()) {
+                    log::info!("Body: {}", content);
+                } else {
+                    log::info!("Body: (binary)");
+                }
+            }
+        }
     }
 }
