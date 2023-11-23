@@ -14,4 +14,8 @@ pub struct Cli {
     /// trace all requests
     #[clap(short, long)]
     pub trace: bool,
+
+    /// use stdio comm method (nvim)
+    #[clap(short, long)]
+    pub stdin: bool,
 }

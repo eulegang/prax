@@ -2,13 +2,20 @@ use std::net::SocketAddr;
 
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
-use tokio::{io, net::TcpListener};
+use tokio::{io, net::TcpSocket};
 
 use crate::PROXY;
 
 pub async fn listen(addr: SocketAddr) -> Result<(), io::Error> {
+    let socket = TcpSocket::new_v4()?;
+    socket.bind(addr)?;
+    socket.set_reuseaddr(true)?;
+    socket.set_reuseport(true)?;
+
+    let listener = socket.listen(1024)?;
+
     // We create a TcpListener and bind it to 127.0.0.1:3000
-    let listener = TcpListener::bind(addr).await?;
+    //let mut listener = TcpListener::bind(addr).await?;
 
     // We start a loop to continuously accept incoming connections
     loop {

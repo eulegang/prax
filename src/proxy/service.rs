@@ -75,7 +75,7 @@ impl Service<Request<Incoming>> for &Proxy {
             while let Some(next) = body.frame().await {
                 let frame = next?;
                 if let Some(chunk) = frame.data_ref() {
-                    let _ = AsyncWriteExt::write(&mut buf, &chunk).await;
+                    let _ = AsyncWriteExt::write(&mut buf, chunk).await;
                 }
             }
 
@@ -156,9 +156,9 @@ fn apply_response(resp: &mut Response<Vec<u8>>, rules: &[Rule]) {
                     }
                 }
 
-                let _ = writeln!(buf, "");
+                let _ = writeln!(buf);
 
-                buf.extend_from_slice(&resp.body());
+                buf.extend_from_slice(resp.body());
 
                 if let Ok(s) = std::str::from_utf8(&buf) {
                     log::info!("dump resp\n{s}")
