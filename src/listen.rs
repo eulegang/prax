@@ -1,10 +1,12 @@
 use std::net::SocketAddr;
 
-use hyper::server::conn::http1;
+use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use tokio::{io, net::TcpSocket};
 
-use crate::PROXY;
+mod srv;
+
+use self::srv::service;
 
 pub async fn listen(addr: SocketAddr) -> Result<(), io::Error> {
     let socket = TcpSocket::new_v4()?;
@@ -27,12 +29,10 @@ pub async fn listen(addr: SocketAddr) -> Result<(), io::Error> {
 
         // Spawn a tokio task to serve multiple connections concurrently
         tokio::task::spawn(async move {
-            let proxy = PROXY.as_ref().read().await;
-
             // Finally, we bind the incoming connection to our `hello` service
             if let Err(err) = http1::Builder::new()
                 // `service_fn` converts our function in a `Service`
-                .serve_connection(io, &*proxy)
+                .serve_connection(io, service_fn(service))
                 .await
             {
                 println!("Error serving connection: {:?}", err);

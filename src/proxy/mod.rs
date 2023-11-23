@@ -1,4 +1,4 @@
-mod service;
+pub mod service;
 
 #[derive(Default, Debug)]
 pub struct Proxy {
@@ -31,7 +31,7 @@ pub enum Rule {
 }
 
 impl Proxy {
-    fn find_target<'a>(&'a self, name: &str) -> Option<&'a Target> {
+    pub fn find_target<'a>(&'a self, name: &str) -> Option<&'a Target> {
         self.targets.iter().find(|t| t.hostname == name)
     }
 }
