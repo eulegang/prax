@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Bytes, Incoming},
@@ -10,10 +8,9 @@ use hyper_util::rt::TokioIo;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 use crate::{
-    comm::send_note,
     hist::{self},
     proxy::service::{apply_request, apply_response},
-    COMM, HIST, PROXY,
+    HIST, PROXY,
 };
 
 pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes>>> {
@@ -43,13 +40,8 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
         log::info!("[{} {} {} {}]", host, port, req.method(), req.uri().path());
 
         let req = hist::Request::from(&req);
-        let path = req.path.clone();
         let mut hist = HIST.write().await;
         let xid = hist.request(req);
-
-        if COMM.load(Ordering::SeqCst) {
-            send_note(crate::comm::Note::ReqDecl { id: xid, path }).await?;
-        }
 
         id = Some(xid);
     }
@@ -89,10 +81,10 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
 
     if let Some(id) = id {
         let res = hist::Response::from(&resp);
-        let status = res.status;
+        //let status = res.status;
         let mut hist = HIST.write().await;
         if hist.response(id, res) {
-            send_note(crate::comm::Note::ResDecl { id, status }).await?;
+            //send_note(crate::comm::Note::ResDecl { id, status }).await?;
         }
     }
 
@@ -108,7 +100,7 @@ async fn collect(mut incoming: Incoming) -> eyre::Result<Vec<u8>> {
     while let Some(next) = incoming.frame().await {
         let frame = next?;
         if let Some(chunk) = frame.data_ref() {
-            buf.write(chunk).await?;
+            buf.write_all(chunk).await?;
         }
     }
 

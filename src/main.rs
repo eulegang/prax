@@ -1,11 +1,14 @@
 use hist::History;
+use lazy_static::lazy_static;
+use nvim_rs::Neovim;
 use once_cell::sync::Lazy;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 use clap::Parser;
 use log::LevelFilter;
 use proxy::Proxy;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 mod cli;
 mod comm;
@@ -14,9 +17,15 @@ mod hist;
 mod listen;
 mod proxy;
 
+mod io;
+
+lazy_static! {
+    static ref NVIM: Arc<Mutex<Option<Neovim<io::IoConn>>>> =
+        Arc::new(Mutex::new(None::<Neovim<io::IoConn>>));
+}
+
 static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
 static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
-static COMM: AtomicBool = AtomicBool::new(false);
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> eyre::Result<()> {
@@ -34,12 +43,14 @@ async fn main() -> eyre::Result<()> {
         config::config(path)?
     };
 
-    if cli.stdin {
-        COMM.swap(true, std::sync::atomic::Ordering::SeqCst);
-        tokio::spawn(async { comm::main().await });
+    let token = CancellationToken::new();
+
+    if let Some(nvim) = cli.nvim {
+        let token = token.clone();
+        tokio::spawn(async { comm::main(nvim, token).await });
     }
 
-    listen::listen(cli.listen).await?;
+    listen::listen(cli.listen, token).await?;
 
     Ok(())
 }

@@ -35,10 +35,6 @@ pub struct Entry {
 pub struct History(Vec<Entry>);
 
 impl History {
-    pub fn get(&self, index: usize) -> Option<&Entry> {
-        self.0.get(index)
-    }
-
     pub fn request(&mut self, request: Request) -> usize {
         let response = None;
         let ent = Entry { request, response };
@@ -81,8 +77,8 @@ impl From<&hyper::Request<Vec<u8>>> for Request {
 
         if let Some(q) = value.uri().path_and_query() {
             if let Some(q) = q.query() {
-                for kv in q.split("&") {
-                    if let Some((key, value)) = kv.split_once("=") {
+                for kv in q.split('&') {
+                    if let Some((key, value)) = kv.split_once('=') {
                         query.insert(key.to_string(), value.to_string());
                     }
                 }
