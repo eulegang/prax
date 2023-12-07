@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Bytes, Incoming},
@@ -8,11 +10,13 @@ use hyper_util::rt::TokioIo;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 use crate::{
+    comm::send_note,
+    hist::{self},
     proxy::service::{apply_request, apply_response},
-    PROXY,
+    COMM, HIST, PROXY,
 };
 
-pub async fn service(mut req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes>>> {
+pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes>>> {
     let Some(host) = req.uri().host() else {
         let body = "Bad Request".as_bytes().into();
 
@@ -24,13 +28,30 @@ pub async fn service(mut req: Request<Incoming>) -> eyre::Result<Response<Full<B
     let port = req.uri().port_u16().unwrap_or(80);
     let lookup = format!("{host}:{port}");
 
+    let (parts, body) = req.into_parts();
+    let buf = collect(body).await?;
+    let mut req = Request::from_parts(parts, buf);
+
     let proxy = PROXY.read().await;
 
     let target = proxy.find_target(&lookup);
     let log = target.is_some() || !proxy.focus;
 
+    let mut id = None::<usize>;
+
     if log {
         log::info!("[{} {} {} {}]", host, port, req.method(), req.uri().path());
+
+        let req = hist::Request::from(&req);
+        let path = req.path.clone();
+        let mut hist = HIST.write().await;
+        let xid = hist.request(req);
+
+        if COMM.load(Ordering::SeqCst) {
+            send_note(crate::comm::Note::ReqDecl { id: xid, path }).await?;
+        }
+
+        id = Some(xid);
     }
 
     let mut resp_rules = None;
@@ -43,7 +64,7 @@ pub async fn service(mut req: Request<Incoming>) -> eyre::Result<Response<Full<B
     let stream = TcpStream::connect(format!("{host}:{port}")).await.unwrap();
     let io = TokioIo::new(stream);
 
-    let (mut sender, conn) = Builder::new().handshake(io).await?;
+    let (mut sender, conn) = Builder::new().handshake::<_, Full<Bytes>>(io).await?;
     tokio::task::spawn(async move {
         if let Err(err) = conn.await {
             println!("Connection failed: {:?}", err);
@@ -57,22 +78,22 @@ pub async fn service(mut req: Request<Incoming>) -> eyre::Result<Response<Full<B
 
     *req.uri_mut() = builder.build().unwrap();
 
-    let mut buf = Vec::with_capacity(0x2000);
-    let resp = sender.send_request(req).await?;
-    let (parts, mut body) = resp.into_parts();
-
-    // Stream the body, writing each frame to stdout as it arrives
-    while let Some(next) = body.frame().await {
-        let frame = next?;
-        if let Some(chunk) = frame.data_ref() {
-            let _ = AsyncWriteExt::write(&mut buf, chunk).await;
-        }
-    }
-
+    let resp = sender.send_request(req.map(|b| b.into())).await?;
+    let (parts, body) = resp.into_parts();
+    let buf = collect(body).await?;
     let mut resp = Response::from_parts(parts, buf);
 
     if log {
         log::info!("[{} {} {}]", host, port, resp.status());
+    }
+
+    if let Some(id) = id {
+        let res = hist::Response::from(&resp);
+        let status = res.status;
+        let mut hist = HIST.write().await;
+        if hist.response(id, res) {
+            send_note(crate::comm::Note::ResDecl { id, status }).await?;
+        }
     }
 
     if let Some(rules) = resp_rules {
@@ -80,4 +101,16 @@ pub async fn service(mut req: Request<Incoming>) -> eyre::Result<Response<Full<B
     }
 
     Ok(resp.map(|b| b.into()))
+}
+
+async fn collect(mut incoming: Incoming) -> eyre::Result<Vec<u8>> {
+    let mut buf = Vec::with_capacity(0x2000);
+    while let Some(next) = incoming.frame().await {
+        let frame = next?;
+        if let Some(chunk) = frame.data_ref() {
+            buf.write(chunk).await?;
+        }
+    }
+
+    Ok(buf)
 }

@@ -1,12 +1,11 @@
 use std::io::Write;
 
-use hyper::body::Incoming;
 use hyper::header::{HeaderName, HeaderValue};
 use hyper::{Request, Response};
 
 use super::{Elem, Rule};
 
-pub fn apply_request(req: &mut Request<Incoming>, rules: &[Rule]) {
+pub fn apply_request(req: &mut Request<Vec<u8>>, rules: &[Rule]) {
     for rule in rules {
         match rule {
             Rule::Dump => {

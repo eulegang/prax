@@ -1,6 +1,6 @@
 use hist::History;
 use once_cell::sync::Lazy;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 
 use clap::Parser;
 use log::LevelFilter;
@@ -16,6 +16,7 @@ mod proxy;
 
 static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
 static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
+static COMM: AtomicBool = AtomicBool::new(false);
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> eyre::Result<()> {
@@ -34,6 +35,7 @@ async fn main() -> eyre::Result<()> {
     };
 
     if cli.stdin {
+        COMM.swap(true, std::sync::atomic::Ordering::SeqCst);
         tokio::spawn(async { comm::main().await });
     }
 

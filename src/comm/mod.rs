@@ -51,7 +51,7 @@ pub async fn main() -> eyre::Result<()> {
 
         buf.extend(&b[0..size]);
 
-        let req: Req = match rmp_serde::from_slice(&buf) {
+        let req: Req = match serde_json::from_slice(&buf) {
             Ok(msg) => {
                 buf.clear();
 
@@ -86,39 +86,27 @@ pub async fn main() -> eyre::Result<()> {
 }
 
 async fn send_res(res: Res) -> eyre::Result<()> {
-    let buf = rmp_serde::to_vec(&res)?;
+    let buf = serde_json::to_vec(&res)?;
 
     let mut stdout = STDOUT.lock().await;
 
     stdout.write_all(&buf).await?;
+    stdout.write_all(&[b'\n']).await?;
+    stdout.flush().await?;
 
     Ok(())
 }
 
-#[allow(dead_code)]
 pub async fn send_note(note: Note) -> eyre::Result<()> {
-    let buf = rmp_serde::to_vec(&note)?;
+    log::info!("sending note: {:?}", note);
+
+    let buf = serde_json::to_vec(&note)?;
 
     let mut stdout = STDOUT.lock().await;
 
     stdout.write_all(&buf).await?;
+    stdout.write_all(&[b'\n']).await?;
+    stdout.flush().await?;
 
     Ok(())
-}
-
-#[test]
-fn xyz() {
-    let bytes: &[u8] = &[
-        130, 167, 109, 101, 115, 115, 97, 103, 101, 171, 104, 101, 108, 108, 111, 32, 119, 111,
-        114, 108, 100, 164, 116, 121, 112, 101, 165, 104, 101, 108, 108, 111,
-    ];
-
-    assert!(rmp_serde::from_slice::<Req>(bytes).is_ok());
-
-    let bytes2: &[u8] = &[
-        130, 164, 116, 121, 112, 101, 165, 104, 101, 108, 108, 111, 167, 109, 101, 115, 115, 97,
-        103, 101, 171, 104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100,
-    ];
-
-    assert!(rmp_serde::from_slice::<Req>(bytes2).is_ok());
 }

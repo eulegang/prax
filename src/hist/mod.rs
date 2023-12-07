@@ -10,19 +10,19 @@ pub struct Body(Bytes);
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Request {
-    method: String,
-    path: String,
-    query: HashMap<String, String>,
-    version: String,
-    headers: HashMap<String, String>,
-    body: Body,
+    pub method: String,
+    pub path: String,
+    pub query: HashMap<String, String>,
+    pub version: String,
+    pub headers: HashMap<String, String>,
+    pub body: Body,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Response {
-    status: u32,
-    headers: HashMap<String, String>,
-    body: Body,
+    pub status: u16,
+    pub headers: HashMap<String, String>,
+    pub body: Body,
 }
 
 #[derive(Debug)]
@@ -61,5 +61,70 @@ impl History {
         ent.response = Some(res);
 
         true
+    }
+}
+
+impl From<&hyper::Request<Vec<u8>>> for Request {
+    fn from(value: &hyper::Request<Vec<u8>>) -> Self {
+        let method = value.method().to_string();
+        let path = value.uri().path().to_string();
+        let version = format!("{:?}", value.version());
+
+        let mut headers = HashMap::new();
+        let mut query = HashMap::new();
+
+        for (key, value) in value.headers() {
+            if let Ok(s) = value.to_str() {
+                headers.insert(key.to_string(), s.to_string());
+            }
+        }
+
+        if let Some(q) = value.uri().path_and_query() {
+            if let Some(q) = q.query() {
+                for kv in q.split("&") {
+                    if let Some((key, value)) = kv.split_once("=") {
+                        query.insert(key.to_string(), value.to_string());
+                    }
+                }
+            }
+        }
+
+        let body = value.body().clone().into();
+
+        Request {
+            method,
+            path,
+            query,
+            version,
+            headers,
+            body,
+        }
+    }
+}
+
+impl From<&hyper::Response<Vec<u8>>> for Response {
+    fn from(value: &hyper::Response<Vec<u8>>) -> Self {
+        let status = value.status().as_u16();
+
+        let mut headers = HashMap::new();
+        for (key, value) in value.headers() {
+            if let Ok(s) = value.to_str() {
+                headers.insert(key.to_string(), s.to_string());
+            }
+        }
+
+        let body = value.body().clone().into();
+
+        Response {
+            status,
+            headers,
+            body,
+        }
+    }
+}
+
+impl From<Vec<u8>> for Body {
+    fn from(value: Vec<u8>) -> Self {
+        Body(value.into())
     }
 }
