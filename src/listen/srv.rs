@@ -8,6 +8,7 @@ use hyper_util::rt::TokioIo;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 use crate::{
+    comm::{report_req, report_res},
     hist::{self},
     proxy::service::{apply_request, apply_response},
     HIST, PROXY,
@@ -40,8 +41,13 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
         log::info!("[{} {} {} {}]", host, port, req.method(), req.uri().path());
 
         let req = hist::Request::from(&req);
+        let path = req.path.clone();
         let mut hist = HIST.write().await;
         let xid = hist.request(req);
+
+        if let Err(err) = report_req(xid, &path).await {
+            log::error!("failed to report request: {err}");
+        }
 
         id = Some(xid);
     }
@@ -59,7 +65,7 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
     let (mut sender, conn) = Builder::new().handshake::<_, Full<Bytes>>(io).await?;
     tokio::task::spawn(async move {
         if let Err(err) = conn.await {
-            println!("Connection failed: {:?}", err);
+            log::error!("Connection failed: {:?}", err);
         }
     });
 
@@ -81,10 +87,12 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
 
     if let Some(id) = id {
         let res = hist::Response::from(&resp);
-        //let status = res.status;
+        let status = res.status;
         let mut hist = HIST.write().await;
         if hist.response(id, res) {
-            //send_note(crate::comm::Note::ResDecl { id, status }).await?;
+            if let Err(err) = report_res(id, status).await {
+                log::error!("failed to report response: {err}");
+            }
         }
     }
 

@@ -40,6 +40,7 @@ impl History {
         let ent = Entry { request, response };
 
         let idx = self.0.len();
+
         self.0.push(ent);
 
         idx

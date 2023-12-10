@@ -29,5 +29,6 @@ pin-project-lite = "0.2.13"
 parity-tokio-ipc = "0.9.0"
 tokio-util = "0.7.10"
 lazy_static = "1.4.0"
+simplelog = "0.12.1"
 
 
