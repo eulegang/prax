@@ -1,8 +1,11 @@
+use std::os::fd::FromRawFd;
+
 use nvim_rs::{compat::tokio::Compat, error::LoopError, Neovim};
 use parity_tokio_ipc::{Connection, Endpoint};
 use pin_project_lite::pin_project;
 use tokio::{
-    io::{split, stdin, stdout, WriteHalf},
+    fs::File,
+    io::{split, WriteHalf},
     spawn,
     task::JoinHandle,
 };
@@ -15,7 +18,7 @@ pin_project! {
     pub enum IoConn {
         Std {
             #[pin]
-            stdout: Compat<tokio::io::Stdout>
+            stdout: Compat<tokio::fs::File>
         },
 
         Unix {
@@ -35,10 +38,13 @@ impl IoConn {
     {
         match info {
             NvimConnInfo::Stdin => {
+                let stdin = unsafe { File::from_raw_fd(0) };
+                let stdout = unsafe { File::from_raw_fd(1) };
+
                 let (neovim, io) = Neovim::<Self>::new(
-                    stdin().compat(),
+                    stdin.compat(),
                     IoConn::Std {
-                        stdout: stdout().compat_write(),
+                        stdout: stdout.compat_write(),
                     },
                     handler,
                 );

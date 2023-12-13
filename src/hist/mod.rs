@@ -59,6 +59,10 @@ impl History {
 
         true
     }
+
+    pub fn entry(&self, index: usize) -> Option<&Entry> {
+        self.0.get(index)
+    }
 }
 
 impl From<&hyper::Request<Vec<u8>>> for Request {

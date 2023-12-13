@@ -26,7 +26,7 @@ async fn main() -> eyre::Result<()> {
 
     if let Some(path) = cli.log {
         simplelog::WriteLogger::init(
-            LevelFilter::Debug,
+            LevelFilter::Trace,
             simplelog::Config::default(),
             File::create(path)?,
         )?;

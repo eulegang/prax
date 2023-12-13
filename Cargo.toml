@@ -32,3 +32,5 @@ lazy_static = "1.4.0"
 simplelog = "0.12.1"
 
 
+[patch.crates-io]
+nvim-rs = { path = "../../external/nvim-rs" }
