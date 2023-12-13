@@ -15,8 +15,6 @@ mod hist;
 mod listen;
 mod proxy;
 
-mod io;
-
 static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
 static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
 
