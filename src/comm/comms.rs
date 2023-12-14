@@ -20,16 +20,31 @@ impl NvimComms {
         }
     }
 
-    pub async fn report_req(&self, id: usize, path: &str) -> eyre::Result<()> {
+    pub async fn report_req(&self, id: usize, req: &Request) -> eyre::Result<()> {
         self.list
-            .set_lines(id as i64, id as i64, false, vec![format!("{}", path)])
+            .set_lines(
+                id as i64,
+                id as i64,
+                false,
+                vec![format!("{} {}", req.method, req.path)],
+            )
+            .await?;
+
+        self.list
+            .add_highlight(
+                self.namespace,
+                "AtkpxMethodGET",
+                id as i64,
+                0,
+                req.method.len() as i64,
+            )
             .await?;
 
         Ok(())
     }
 
-    pub async fn report_res(&self, id: usize, status: u16) -> eyre::Result<()> {
-        let group: Value = match status {
+    pub async fn report_res(&self, id: usize, res: &Response) -> eyre::Result<()> {
+        let group: Value = match res.status {
             100..=199 => "AtkpxStatusInfo".into(),
             200..=299 => "AtkpxStatusOk".into(),
             300..=399 => "AtkpxStatusRedirect".into(),
@@ -47,7 +62,10 @@ impl NvimComms {
                 vec![
                     (
                         "virt_text".into(),
-                        Value::Array(vec![Value::Array(vec![format!("{status}").into(), group])]),
+                        Value::Array(vec![Value::Array(vec![
+                            format!("{}", res.status).into(),
+                            group,
+                        ])]),
                     ),
                     ("virt_text_pos".into(), "eol".into()),
                 ],
@@ -70,20 +88,47 @@ impl NvimComms {
         }
     }
 
-    pub async fn show_detail(&self, req: &Request, res: Option<&Response>) -> eyre::Result<()> {
+    pub async fn show_detail(
+        &self,
+        id: usize,
+        req: &Request,
+        res: Option<&Response>,
+    ) -> eyre::Result<()> {
         let mut lines: Vec<String> = Vec::new();
+        let mut width = 0;
 
-        lines.push(format!("{} {} {}", req.method, req.path, req.version));
+        let line = format!("{} {} {}", req.method, req.path, req.version);
+        width = width.max(line.len());
+        lines.push(line);
         for (key, value) in &req.headers {
-            lines.push(format!("{}: {}", key, value));
+            let line = format!("{}: {}", key, value);
+            width = width.max(line.len());
+            lines.push(line);
         }
 
         lines.push(String::new());
 
+        let height = lines.len();
         self.detail.set_lines(0, -1, false, lines).await?;
 
+        self.nvim
+            .open_win(
+                &self.detail,
+                true,
+                vec![
+                    ("relative".into(), "cursor".into()),
+                    ("style".into(), "minimal".into()),
+                    ("row".into(), 0.into()),
+                    ("col".into(), 0.into()),
+                    ("height".into(), height.into()),
+                    ("width".into(), width.into()),
+                ],
+            )
+            .await?;
+        /*
         let win = self.nvim.get_current_win().await?;
         win.set_buf(&self.detail).await?;
+        */
 
         Ok(())
     }

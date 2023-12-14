@@ -31,9 +31,9 @@ impl nvim_rs::Handler for Handler {
                     return;
                 };
 
-                let (req, res) = match comms.find_line().await {
+                let (line, req, res) = match comms.find_line().await {
                     Ok(line) => match hist.entry(line as usize) {
-                        Some(entry) => (&entry.request, &entry.response),
+                        Some(entry) => (line, &entry.request, &entry.response),
                         None => {
                             log::error!("No history line");
                             return;
@@ -45,7 +45,7 @@ impl nvim_rs::Handler for Handler {
                     }
                 };
 
-                if let Err(err) = comms.show_detail(req, res.as_ref()).await {
+                if let Err(err) = comms.show_detail(line as usize, req, res.as_ref()).await {
                     log::error!("failed to show detail {err}")
                 }
             }

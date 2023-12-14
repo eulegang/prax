@@ -41,11 +41,12 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
         log::info!("[{} {} {} {}]", host, port, req.method(), req.uri().path());
 
         let req = hist::Request::from(&req);
-        let path = req.path.clone();
         let mut hist = HIST.write().await;
         let xid = hist.request(req);
 
-        if let Err(err) = report_req(xid, &path).await {
+        let req = &hist.entry(xid).expect("just inserted").request;
+
+        if let Err(err) = report_req(xid, req).await {
             log::error!("failed to report request: {err}");
         }
 
@@ -87,10 +88,16 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
 
     if let Some(id) = id {
         let res = hist::Response::from(&resp);
-        let status = res.status;
         let mut hist = HIST.write().await;
         if hist.response(id, res) {
-            if let Err(err) = report_res(id, status).await {
+            let res = hist
+                .entry(id)
+                .expect("inserted")
+                .response
+                .as_ref()
+                .expect("response populated");
+
+            if let Err(err) = report_res(id, res).await {
                 log::error!("failed to report response: {err}");
             }
         }
