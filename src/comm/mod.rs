@@ -14,6 +14,7 @@ mod bindings;
 mod comms;
 mod handler;
 mod io;
+mod windower;
 
 pub use bindings::*;
 

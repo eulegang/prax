@@ -1,5 +1,4 @@
 use super::Body;
-use hyper::body::Bytes;
 use serde::{de::Visitor, Deserialize, Serialize, Serializer};
 
 struct BodyVisit;
@@ -15,9 +14,7 @@ impl<'de> Visitor<'de> for BodyVisit {
     where
         E: serde::de::Error,
     {
-        let bytes: Bytes = v.into();
-
-        Ok(Body(bytes))
+        Ok(Body::from(v))
     }
 }
 
@@ -35,6 +32,6 @@ impl Serialize for Body {
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(&self.0)
+        serializer.serialize_bytes(self.as_ref())
     }
 }

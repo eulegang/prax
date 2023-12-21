@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-use hyper::body::Bytes;
 use serde::{Deserialize, Serialize};
 
+mod body;
 mod deser;
 
-#[derive(Debug, Clone)]
-pub struct Body(Bytes);
+pub use body::Body;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Request {
@@ -121,11 +120,5 @@ impl From<&hyper::Response<Vec<u8>>> for Response {
             headers,
             body,
         }
-    }
-}
-
-impl From<Vec<u8>> for Body {
-    fn from(value: Vec<u8>) -> Self {
-        Body(value.into())
     }
 }

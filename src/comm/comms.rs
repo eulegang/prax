@@ -108,6 +108,36 @@ impl NvimComms {
 
         lines.push(String::new());
 
+        if let Some(body) = req.body.lines() {
+            for line in body {
+                width = width.max(line.len());
+                lines.push(line.to_string());
+            }
+        }
+
+        lines.push(String::new());
+
+        if let Some(res) = res {
+            let line = format!("HTTP/1.1 {}", res.status);
+            width = width.max(line.len());
+            lines.push(line);
+
+            for (key, value) in &res.headers {
+                let line = format!("{}: {}", key, value);
+                width = width.max(line.len());
+                lines.push(line);
+            }
+
+            lines.push(String::new());
+
+            if let Some(body) = res.body.lines() {
+                for line in body {
+                    width = width.max(line.len());
+                    lines.push(line.to_string());
+                }
+            }
+        }
+
         let height = lines.len();
         self.detail.set_lines(0, -1, false, lines).await?;
 
@@ -122,13 +152,10 @@ impl NvimComms {
                     ("col".into(), 0.into()),
                     ("height".into(), height.into()),
                     ("width".into(), width.into()),
+                    ("border".into(), "rounded".into()),
                 ],
             )
             .await?;
-        /*
-        let win = self.nvim.get_current_win().await?;
-        win.set_buf(&self.detail).await?;
-        */
 
         Ok(())
     }
