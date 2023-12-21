@@ -90,7 +90,7 @@ impl NvimComms {
 
     pub async fn show_detail(
         &self,
-        id: usize,
+        _id: usize,
         req: &Request,
         res: Option<&Response>,
     ) -> eyre::Result<()> {
