@@ -4,7 +4,7 @@ use mlua::{FromLua, Lua, Result, UserData, Variadic};
 
 use crate::PROXY;
 
-use super::{ConfError, Elem, Rule};
+use super::{ConfError, Rule};
 
 #[derive(FromLua, Clone)]
 pub struct TargetRef {
@@ -39,10 +39,6 @@ async fn target_ref_req(
         })?;
 
     for r in rules {
-        if matches!(r, Rule::Log(Elem::Status)) {
-            log::warn!("status is a response oriented item")
-        }
-
         t.req.push(r.into());
     }
 
@@ -66,18 +62,6 @@ async fn target_ref_resp(
         })?;
 
     for r in rules {
-        if matches!(r, Rule::Log(Elem::Method)) {
-            log::warn!("method is a response oriented item")
-        }
-
-        if matches!(r, Rule::Log(Elem::Path)) {
-            log::warn!("path is a response oriented item")
-        }
-
-        if matches!(r, Rule::Log(Elem::Query(_))) {
-            log::warn!("query is a response oriented item")
-        }
-
         t.resp.push(r.into());
     }
 

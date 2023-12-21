@@ -14,19 +14,8 @@ pub struct Target {
 }
 
 #[derive(Debug, Clone)]
-pub enum Elem {
-    Path,
-    Body,
-    Status,
-    Method,
-    Header(String),
-    Query(String),
-}
-
-#[derive(Debug, Clone)]
 pub enum Rule {
     SetHeader(String, String),
-    Log(Elem),
     Dump,
 }
 
