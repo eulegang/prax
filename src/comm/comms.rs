@@ -1,4 +1,4 @@
-use super::{Buffer, Neovim, Value};
+use super::{windower::DimTracker, Buffer, Neovim, Value};
 
 use crate::hist::{Request, Response};
 
@@ -94,51 +94,40 @@ impl NvimComms {
         req: &Request,
         res: Option<&Response>,
     ) -> eyre::Result<()> {
-        let mut lines: Vec<String> = Vec::new();
-        let mut width = 0;
+        let mut dim = DimTracker::default();
 
-        let line = format!("{} {} {}", req.method, req.path, req.version);
-        width = width.max(line.len());
-        lines.push(line);
+        dim.push(format!("{} {} {}", req.method, req.path, req.version));
         for (key, value) in &req.headers {
-            let line = format!("{}: {}", key, value);
-            width = width.max(line.len());
-            lines.push(line);
+            dim.push(format!("{}: {}", key, value));
         }
 
-        lines.push(String::new());
+        dim.blank();
 
         if let Some(body) = req.body.lines() {
             for line in body {
-                width = width.max(line.len());
-                lines.push(line.to_string());
+                dim.push(line.to_string());
             }
         }
 
-        lines.push(String::new());
+        dim.blank();
 
         if let Some(res) = res {
-            let line = format!("HTTP/1.1 {}", res.status);
-            width = width.max(line.len());
-            lines.push(line);
+            dim.push(format!("HTTP/1.1 {}", res.status));
 
             for (key, value) in &res.headers {
-                let line = format!("{}: {}", key, value);
-                width = width.max(line.len());
-                lines.push(line);
+                dim.push(format!("{}: {}", key, value));
             }
 
-            lines.push(String::new());
+            dim.blank();
 
             if let Some(body) = res.body.lines() {
                 for line in body {
-                    width = width.max(line.len());
-                    lines.push(line.to_string());
+                    dim.push(line.to_string())
                 }
             }
         }
 
-        let height = lines.len();
+        let (width, height, lines) = dim.take();
         self.detail.set_lines(0, -1, false, lines).await?;
 
         self.nvim

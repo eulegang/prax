@@ -1,37 +1,20 @@
-pub struct Windower<I, F> {
+#[derive(Default, Debug)]
+pub struct DimTracker {
     width: usize,
-    height: usize,
-    iter: I,
-    handle: F,
+    lines: Vec<String>,
 }
 
-impl<I, F> Iterator for Windower<I, F>
-where
-    I: Iterator,
-    F: Fn(&I::Item) -> usize,
-{
-    type Item = I::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let sub = self.iter.next()?;
-        self.height += 1;
-        self.width = self.width.max((self.handle)(&sub));
-
-        Some(sub)
-    }
-}
-
-impl<I, F> Windower<I, F> {
-    pub fn take(self) -> (usize, usize) {
-        (self.width, self.height)
+impl DimTracker {
+    pub fn push(&mut self, line: String) {
+        self.width = self.width.max(line.len());
+        self.lines.push(line);
     }
 
-    pub fn init(iter: I, handle: F) -> Self {
-        Windower {
-            width: 0,
-            height: 0,
-            iter,
-            handle,
-        }
+    pub fn blank(&mut self) {
+        self.lines.push(String::new());
+    }
+
+    pub fn take(self) -> (usize, usize, Vec<String>) {
+        (self.width, self.lines.len(), self.lines)
     }
 }
