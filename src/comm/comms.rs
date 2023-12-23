@@ -2,7 +2,6 @@ use super::{windower::DimTracker, Buffer, Neovim, Value};
 
 use crate::hist::{Request, Response};
 
-#[allow(dead_code)]
 pub struct NvimComms {
     nvim: Neovim,
     list: Buffer,
@@ -30,14 +29,21 @@ impl NvimComms {
             )
             .await?;
 
+        let color = match req.method.as_str() {
+            "GET" => "AtkpxMethodGET",
+            "HEAD" => "AtkpxMethodHEAD",
+            "POST" => "AtkpxMethodPOST",
+            "PUT" => "AtkpxMethodPUT",
+            "DELETE" => "AtkpxMethodDELETE",
+            "OPTIONS" => "AtkpxMethodOPTIONS",
+            "TRACE" => "AtkpxMethodTRACE",
+            "PATCH" => "AtkpxMethodPATCH",
+
+            _ => "AtkpxMethodGET",
+        };
+
         self.list
-            .add_highlight(
-                self.namespace,
-                "AtkpxMethodGET",
-                id as i64,
-                0,
-                req.method.len() as i64,
-            )
+            .add_highlight(self.namespace, color, id as i64, 0, req.method.len() as i64)
             .await?;
 
         Ok(())
