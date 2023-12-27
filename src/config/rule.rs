@@ -6,6 +6,7 @@ use crate::proxy::Rule as PRule;
 pub enum Rule {
     SetHeader(String, String),
     Dump,
+    Intercept,
 }
 
 impl From<Rule> for PRule {
@@ -13,6 +14,7 @@ impl From<Rule> for PRule {
         match value {
             Rule::SetHeader(k, v) => PRule::SetHeader(k, v),
             Rule::Dump => PRule::Dump,
+            Rule::Intercept => PRule::Intercept,
         }
     }
 }

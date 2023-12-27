@@ -55,7 +55,7 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
 
     let mut resp_rules = None;
     if let Some(target) = target {
-        apply_request(&mut req, &target.req);
+        apply_request(&mut req, &target.req).await;
 
         resp_rules = Some(target.resp.clone());
     }
@@ -104,7 +104,7 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
     }
 
     if let Some(rules) = resp_rules {
-        apply_response(&mut resp, &rules);
+        apply_response(&mut resp, &rules).await;
     }
 
     Ok(resp.map(|b| b.into()))

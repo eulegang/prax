@@ -3,9 +3,11 @@ use std::io::Write;
 use hyper::header::{HeaderName, HeaderValue};
 use hyper::{Request, Response};
 
+use crate::comm::intercept_request;
+
 use super::Rule;
 
-pub fn apply_request(req: &mut Request<Vec<u8>>, rules: &[Rule]) {
+pub async fn apply_request(req: &mut Request<Vec<u8>>, rules: &[Rule]) {
     for rule in rules {
         match rule {
             Rule::Dump => {
@@ -25,6 +27,16 @@ pub fn apply_request(req: &mut Request<Vec<u8>>, rules: &[Rule]) {
                 }
             }
 
+            Rule::Intercept => match intercept_request(req).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    log::warn!("can not sent to intercepter");
+                }
+                Err(e) => {
+                    log::error!("failed to intercept: {e}");
+                }
+            },
+
             Rule::SetHeader(k, v) => {
                 if let Ok(header) = HeaderValue::from_str(v) {
                     req.headers_mut()
@@ -35,7 +47,7 @@ pub fn apply_request(req: &mut Request<Vec<u8>>, rules: &[Rule]) {
     }
 }
 
-pub fn apply_response(resp: &mut Response<Vec<u8>>, rules: &[Rule]) {
+pub async fn apply_response(resp: &mut Response<Vec<u8>>, rules: &[Rule]) {
     for rule in rules {
         match rule {
             Rule::Dump => {
@@ -57,6 +69,10 @@ pub fn apply_response(resp: &mut Response<Vec<u8>>, rules: &[Rule]) {
                 } else {
                     log::error!("response is not text");
                 }
+            }
+
+            Rule::Intercept => {
+                todo!()
             }
 
             Rule::SetHeader(k, v) => {

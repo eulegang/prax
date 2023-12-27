@@ -16,6 +16,7 @@ pub struct Target {
 #[derive(Debug, Clone)]
 pub enum Rule {
     SetHeader(String, String),
+    Intercept,
     Dump,
 }
 

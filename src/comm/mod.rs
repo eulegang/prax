@@ -31,21 +31,9 @@ pub async fn main(conn_info: NvimConnInfo, token: CancellationToken) -> eyre::Re
 
     let (nvim, join) = IoConn::connect(&conn_info, handler).await?;
 
-    let list = nvim.create_buf(true, true).await?;
-    let detail = nvim.create_buf(false, true).await?;
-    list.set_name("atkpx").await?;
-
-    let namespace = nvim.create_namespace("atkpx").await?;
-
-    let win = nvim.get_current_win().await?;
-    win.set_buf(&list).await?;
-
-    list.set_keymap("n", "<cr>", ":lua require(\"atkpx\").detail()<cr>", vec![])
-        .await?;
-
     {
         let mut comms = COMMS.lock().await;
-        comms.replace(NvimComms::init(nvim, list, detail, namespace));
+        comms.replace(NvimComms::init(nvim).await?);
     }
 
     match join.await {

@@ -1,22 +1,58 @@
+use self::lines::{imprint_lines, req_to_lines};
 use super::{windower::DimTracker, Buffer, Neovim, Value};
-
 use crate::hist::{Request, Response};
+use std::sync::Arc;
+use tokio::sync::Notify;
+
+mod intercept;
+mod lines;
 
 pub struct NvimComms {
     nvim: Neovim,
     list: Buffer,
     detail: Buffer,
+    intercept: Buffer,
+
+    backlog: intercept::Backlog,
+    editing: bool,
     namespace: i64,
 }
 
 impl NvimComms {
-    pub fn init(nvim: Neovim, list: Buffer, detail: Buffer, namespace: i64) -> Self {
-        Self {
+    pub async fn init(nvim: Neovim) -> eyre::Result<Self> {
+        let list = nvim.create_buf(true, true).await?;
+        let detail = nvim.create_buf(false, true).await?;
+        let intercept = nvim.create_buf(false, true).await?;
+        list.set_name("atkpx").await?;
+
+        let namespace = nvim.create_namespace("atkpx").await?;
+
+        intercept
+            .set_keymap(
+                "n",
+                "q",
+                ":lua require(\"atkpx\").submit_intercept()<cr>",
+                vec![],
+            )
+            .await?;
+
+        let win = nvim.get_current_win().await?;
+        win.set_buf(&list).await?;
+
+        list.set_keymap("n", "<cr>", ":lua require(\"atkpx\").detail()<cr>", vec![])
+            .await?;
+
+        let backlog = intercept::Backlog::default();
+
+        Ok(Self {
             nvim,
             list,
             detail,
+            intercept,
+            backlog,
+            editing: false,
             namespace,
-        }
+        })
     }
 
     pub async fn report_req(&self, id: usize, req: &Request) -> eyre::Result<()> {
@@ -151,6 +187,67 @@ impl NvimComms {
                 ],
             )
             .await?;
+
+        Ok(())
+    }
+
+    pub async fn intercept_request(
+        &mut self,
+        req: &mut hyper::Request<Vec<u8>>,
+    ) -> eyre::Result<(usize, Arc<Notify>)> {
+        let lines = req_to_lines(req)?;
+
+        if self.editing {
+            log::debug!("pushing intercept backlog");
+            self.backlog.push_backlog(lines);
+        } else {
+            log::debug!("displaying intercept");
+            self.intercept.set_lines(0, -1, false, lines).await?;
+
+            let width = self.nvim.get_current_win().await?.get_width().await?;
+            let height = self.nvim.get_current_win().await?.get_height().await?;
+
+            self.nvim
+                .open_win(
+                    &self.intercept,
+                    true,
+                    vec![
+                        ("relative".into(), "editor".into()),
+                        ("title".into(), "Intercept Request".into()),
+                        ("row".into(), 5.into()),
+                        ("col".into(), 5.into()),
+                        ("height".into(), (height - 10).into()),
+                        ("width".into(), (width - 10).into()),
+                        ("border".into(), "rounded".into()),
+                    ],
+                )
+                .await?;
+        }
+
+        Ok((self.backlog.req_index(), self.backlog.notify()))
+    }
+
+    pub async fn retrieve_intercept_request(
+        &mut self,
+        tick: usize,
+        req: &mut hyper::Request<Vec<u8>>,
+    ) -> eyre::Result<bool> {
+        log::trace!("attempting with {tick}");
+        if !self.backlog.submit_tick(tick) {
+            return Ok(false);
+        }
+
+        log::debug!("filling in response");
+        let lines = self.intercept.get_lines(0, -1, false).await?;
+
+        imprint_lines(req, lines)?;
+
+        Ok(true)
+    }
+
+    pub async fn submit_intercept(&mut self) -> eyre::Result<()> {
+        log::debug!("notifying waiting green threads");
+        self.backlog.notify().notify_waiters();
 
         Ok(())
     }

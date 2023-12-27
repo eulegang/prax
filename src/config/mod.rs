@@ -25,6 +25,7 @@ pub fn config(path: PathBuf) -> eyre::Result<()> {
     )?;
 
     globals.set("dump", lua.create_userdata(Rule::Dump)?)?;
+    globals.set("intercept", lua.create_userdata(Rule::Intercept)?)?;
 
     let chunk = lua.load(content).set_name("atkpx-config");
 

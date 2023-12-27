@@ -1,4 +1,4 @@
-use super::io::IoConn;
+use super::{io::IoConn, submit_intercept};
 use tokio_util::sync::CancellationToken;
 
 use super::COMMS;
@@ -48,6 +48,12 @@ impl nvim_rs::Handler for Handler {
                 if let Err(err) = comms.show_detail(line as usize, req, res.as_ref()).await {
                     log::error!("failed to show detail {err}")
                 }
+            }
+
+            "submit_intercept" => {
+                if let Err(e) = submit_intercept().await {
+                    log::error!("failed to submit intercept: {e}");
+                };
             }
             _ => (),
         }
