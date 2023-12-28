@@ -1,6 +1,9 @@
-use self::lines::{imprint_lines, req_to_lines};
+use self::lines::{imprint_lines, req_to_lines, resp_to_lines};
 use super::{windower::DimTracker, Buffer, Neovim, Value, Window};
-use crate::hist::{Request, Response};
+use crate::{
+    comm::comms::lines::imprint_lines_resp,
+    hist::{Request, Response},
+};
 use tokio::sync::oneshot::Receiver;
 
 mod intercept;
@@ -235,6 +238,48 @@ impl NvimComms {
         }
     }
 
+    pub async fn intercept_response(
+        &mut self,
+        resp: &mut hyper::Response<Vec<u8>>,
+    ) -> eyre::Result<Receiver<Vec<String>>> {
+        let lines = resp_to_lines(resp)?;
+
+        if self.editing {
+            log::debug!("pushing intercept backlog");
+            Ok(self.backlog.push_backlog(lines))
+        } else {
+            let recv = self.backlog.push_current();
+            log::debug!("displaying intercept");
+            self.intercept.set_lines(0, -1, false, lines).await?;
+
+            let width = self.nvim.get_current_win().await?.get_width().await?;
+            let height = self.nvim.get_current_win().await?.get_height().await?;
+
+            let win = self
+                .nvim
+                .open_win(
+                    &self.intercept,
+                    true,
+                    vec![
+                        ("relative".into(), "editor".into()),
+                        ("title".into(), "Intercept Response".into()),
+                        ("row".into(), 5.into()),
+                        ("col".into(), 5.into()),
+                        ("height".into(), (height - 10).into()),
+                        ("width".into(), (width - 10).into()),
+                        ("border".into(), "rounded".into()),
+                    ],
+                )
+                .await?;
+
+            self.intercept_win = Some(win);
+
+            self.editing = true;
+
+            Ok(recv)
+        }
+    }
+
     pub async fn retrieve_intercept_request(
         &mut self,
         lines: Vec<String>,
@@ -243,6 +288,29 @@ impl NvimComms {
         log::debug!("filling in response");
 
         imprint_lines(req, lines)?;
+
+        if let Some(backlog) = self.backlog.pop() {
+            self.intercept.set_lines(0, -1, false, backlog).await?;
+        } else {
+            self.editing = false;
+            if let Some(win) = &self.intercept_win {
+                win.close(true).await?;
+            }
+
+            self.intercept_win = None;
+        }
+
+        Ok(true)
+    }
+
+    pub async fn retrieve_intercept_response(
+        &mut self,
+        lines: Vec<String>,
+        resp: &mut hyper::Response<Vec<u8>>,
+    ) -> eyre::Result<bool> {
+        log::debug!("filling in response");
+
+        imprint_lines_resp(resp, lines)?;
 
         if let Some(backlog) = self.backlog.pop() {
             self.intercept.set_lines(0, -1, false, backlog).await?;

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use hyper::{
     header::{HeaderName, HeaderValue},
-    HeaderMap, Uri,
+    HeaderMap, StatusCode, Uri,
 };
 
 pub fn req_to_lines(req: &hyper::Request<Vec<u8>>) -> eyre::Result<Vec<String>> {
@@ -27,6 +27,26 @@ pub fn req_to_lines(req: &hyper::Request<Vec<u8>>) -> eyre::Result<Vec<String>> 
     res.push(String::new());
 
     let body = std::str::from_utf8(req.body())?;
+
+    for line in body.lines() {
+        res.push(line.to_string());
+    }
+
+    Ok(res)
+}
+
+pub fn resp_to_lines(resp: &hyper::Response<Vec<u8>>) -> eyre::Result<Vec<String>> {
+    let mut res = Vec::new();
+
+    res.push(resp.status().as_u16().to_string());
+
+    for (k, v) in resp.headers() {
+        res.push(format!("{}: {}", k, v.to_str()?));
+    }
+
+    res.push(String::new());
+
+    let body = std::str::from_utf8(resp.body())?;
 
     for line in body.lines() {
         res.push(line.to_string());
@@ -95,4 +115,45 @@ fn extract_status(uri: &Uri, lines: &str) -> eyre::Result<(hyper::Method, hyper:
     log::debug!("modiified {method:?} {uri:?}");
 
     Ok((method, uri))
+}
+
+pub fn imprint_lines_resp(
+    resp: &mut hyper::Response<Vec<u8>>,
+    lines: Vec<String>,
+) -> eyre::Result<()> {
+    let Some(status) = lines.get(0) else {
+        eyre::bail!("empty intercept")
+    };
+
+    let code = StatusCode::from_str(status)?;
+
+    let mut headermap = HeaderMap::new();
+    let mut i = 1;
+    for line in lines.iter().skip(1) {
+        if line.is_empty() {
+            break;
+        }
+
+        if let Some((name, value)) = line.split_once(':') {
+            let name = HeaderName::from_str(name)?;
+            let value = HeaderValue::from_str(value)?;
+
+            headermap.insert(name, value);
+        }
+
+        i += 1;
+    }
+
+    let mut body = Vec::new();
+
+    for line in &lines[i..] {
+        body.extend_from_slice(line.as_bytes());
+        body.push(b'\n');
+    }
+
+    *resp.status_mut() = code;
+    *resp.headers_mut() = headermap;
+    *resp.body_mut() = body;
+
+    Ok(())
 }

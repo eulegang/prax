@@ -44,6 +44,28 @@ pub async fn intercept_request(req: &mut hyper::Request<Vec<u8>>) -> eyre::Resul
     Ok(true)
 }
 
+pub async fn intercept_response(req: &mut hyper::Response<Vec<u8>>) -> eyre::Result<bool> {
+    let recv = {
+        let mut comms = COMMS.lock().await;
+
+        if let Some(ref mut comms) = *comms {
+            comms.intercept_response(req).await?
+        } else {
+            return Ok(false);
+        }
+    };
+
+    let lines = recv.await?;
+    {
+        let mut comms = COMMS.lock().await;
+        if let Some(ref mut comms) = *comms {
+            if comms.retrieve_intercept_response(lines, req).await? {}
+        };
+    }
+
+    Ok(true)
+}
+
 pub async fn submit_intercept() -> eyre::Result<()> {
     let mut comms = COMMS.lock().await;
 

@@ -3,7 +3,7 @@ use std::io::Write;
 use hyper::header::{HeaderName, HeaderValue};
 use hyper::{Request, Response};
 
-use crate::comm::intercept_request;
+use crate::comm::{intercept_request, intercept_response};
 
 use super::Rule;
 
@@ -72,9 +72,15 @@ pub async fn apply_response(resp: &mut Response<Vec<u8>>, rules: &[Rule]) {
                 }
             }
 
-            Rule::Intercept => {
-                todo!()
-            }
+            Rule::Intercept => match intercept_response(resp).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    log::warn!("can not sent to intercepter");
+                }
+                Err(e) => {
+                    log::error!("failed to intercept: {e}");
+                }
+            },
 
             Rule::SetHeader(k, v) => {
                 if let Ok(header) = HeaderValue::from_str(v) {
