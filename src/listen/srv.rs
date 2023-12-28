@@ -37,6 +37,13 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
 
     let mut id = None::<usize>;
 
+    let mut resp_rules = None;
+    if let Some(target) = target {
+        apply_request(&mut req, &target.req).await;
+
+        resp_rules = Some(target.resp.clone());
+    }
+
     if log {
         log::info!("[{} {} {} {}]", host, port, req.method(), req.uri().path());
 
@@ -51,13 +58,6 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
         }
 
         id = Some(xid);
-    }
-
-    let mut resp_rules = None;
-    if let Some(target) = target {
-        apply_request(&mut req, &target.req).await;
-
-        resp_rules = Some(target.resp.clone());
     }
 
     let stream = TcpStream::connect(format!("{host}:{port}")).await.unwrap();
@@ -82,6 +82,10 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
     let buf = collect(body).await?;
     let mut resp = Response::from_parts(parts, buf);
 
+    if let Some(rules) = resp_rules {
+        apply_response(&mut resp, &rules).await;
+    }
+
     if log {
         log::info!("[{} {} {}]", host, port, resp.status());
     }
@@ -101,10 +105,6 @@ pub async fn service(req: Request<Incoming>) -> eyre::Result<Response<Full<Bytes
                 log::error!("failed to report response: {err}");
             }
         }
-    }
-
-    if let Some(rules) = resp_rules {
-        apply_response(&mut resp, &rules).await;
     }
 
     Ok(resp.map(|b| b.into()))
