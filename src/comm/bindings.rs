@@ -23,7 +23,7 @@ pub async fn report_res(id: usize, res: &Response) -> eyre::Result<()> {
 }
 
 pub async fn intercept_request(req: &mut hyper::Request<Vec<u8>>) -> eyre::Result<bool> {
-    let (tick, notify) = {
+    let recv = {
         let mut comms = COMMS.lock().await;
 
         if let Some(ref mut comms) = *comms {
@@ -33,17 +33,12 @@ pub async fn intercept_request(req: &mut hyper::Request<Vec<u8>>) -> eyre::Resul
         }
     };
 
-    log::debug!("waiting on tick = {tick}");
-
-    loop {
-        notify.notified().await;
-
+    let lines = recv.await?;
+    {
         let mut comms = COMMS.lock().await;
         if let Some(ref mut comms) = *comms {
-            if comms.retrieve_intercept_request(tick, req).await? {
-                break;
-            }
-        }
+            if comms.retrieve_intercept_request(lines, req).await? {}
+        };
     }
 
     Ok(true)

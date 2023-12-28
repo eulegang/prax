@@ -1,8 +1,7 @@
 use self::lines::{imprint_lines, req_to_lines};
 use super::{windower::DimTracker, Buffer, Neovim, Value, Window};
 use crate::hist::{Request, Response};
-use std::sync::Arc;
-use tokio::sync::Notify;
+use tokio::sync::oneshot::Receiver;
 
 mod intercept;
 mod lines;
@@ -198,54 +197,50 @@ impl NvimComms {
     pub async fn intercept_request(
         &mut self,
         req: &mut hyper::Request<Vec<u8>>,
-    ) -> eyre::Result<(usize, Arc<Notify>)> {
+    ) -> eyre::Result<Receiver<Vec<String>>> {
         let lines = req_to_lines(req)?;
 
         if self.editing {
             log::debug!("pushing intercept backlog");
-            self.backlog.push_backlog(lines);
+            Ok(self.backlog.push_backlog(lines))
         } else {
-            self.backlog.push_current();
+            let recv = self.backlog.push_current();
             log::debug!("displaying intercept");
             self.intercept.set_lines(0, -1, false, lines).await?;
 
             let width = self.nvim.get_current_win().await?.get_width().await?;
             let height = self.nvim.get_current_win().await?.get_height().await?;
 
-            self.nvim
-                .open_win(
-                    &self.intercept,
-                    true,
-                    vec![
-                        ("relative".into(), "editor".into()),
-                        ("title".into(), "Intercept Request".into()),
-                        ("row".into(), 5.into()),
-                        ("col".into(), 5.into()),
-                        ("height".into(), (height - 10).into()),
-                        ("width".into(), (width - 10).into()),
-                        ("border".into(), "rounded".into()),
-                    ],
-                )
-                .await?;
+            self.intercept_win = Some(
+                self.nvim
+                    .open_win(
+                        &self.intercept,
+                        true,
+                        vec![
+                            ("relative".into(), "editor".into()),
+                            ("title".into(), "Intercept Request".into()),
+                            ("row".into(), 5.into()),
+                            ("col".into(), 5.into()),
+                            ("height".into(), (height - 10).into()),
+                            ("width".into(), (width - 10).into()),
+                            ("border".into(), "rounded".into()),
+                        ],
+                    )
+                    .await?,
+            );
 
             self.editing = true;
-        }
 
-        Ok((self.backlog.req_index(), self.backlog.notify()))
+            Ok(recv)
+        }
     }
 
     pub async fn retrieve_intercept_request(
         &mut self,
-        tick: usize,
+        lines: Vec<String>,
         req: &mut hyper::Request<Vec<u8>>,
     ) -> eyre::Result<bool> {
-        log::trace!("attempting with {tick}");
-        if !self.backlog.submit_tick(tick) {
-            return Ok(false);
-        }
-
         log::debug!("filling in response");
-        let lines = self.intercept.get_lines(0, -1, false).await?;
 
         imprint_lines(req, lines)?;
 
@@ -264,10 +259,11 @@ impl NvimComms {
     }
 
     pub async fn submit_intercept(&mut self) -> eyre::Result<()> {
-        log::debug!("backlog: {:?}", self.backlog);
-
         log::debug!("notifying waiting green threads");
-        self.backlog.notify().notify_waiters();
+
+        let lines = self.intercept.get_lines(0, -1, false).await?;
+
+        self.backlog.notify(lines);
 
         Ok(())
     }
