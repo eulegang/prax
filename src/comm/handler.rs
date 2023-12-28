@@ -27,7 +27,7 @@ impl nvim_rs::Handler for Handler {
             "shutdown" => self.token.cancel(),
             "detail" => {
                 let hist = HIST.read().await;
-                let Some(ref comms) = *COMMS.lock().await else {
+                let Some(ref mut comms) = *COMMS.lock().await else {
                     return;
                 };
 

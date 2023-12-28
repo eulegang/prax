@@ -20,6 +20,7 @@ pub use bindings::*;
 
 pub(crate) type Neovim = nvim_rs::Neovim<IoConn>;
 pub(crate) type Buffer = nvim_rs::Buffer<IoConn>;
+pub(crate) type Window = nvim_rs::Window<IoConn>;
 
 lazy_static::lazy_static! {
     static ref COMMS: Arc<Mutex<Option<NvimComms>>> = Arc::new(Mutex::new(None));

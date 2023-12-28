@@ -8,6 +8,7 @@ use crate::comm::intercept_request;
 use super::Rule;
 
 pub async fn apply_request(req: &mut Request<Vec<u8>>, rules: &[Rule]) {
+    log::debug!("applying request rules");
     for rule in rules {
         match rule {
             Rule::Dump => {

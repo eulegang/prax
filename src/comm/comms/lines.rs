@@ -13,6 +13,10 @@ pub fn req_to_lines(req: &hyper::Request<Vec<u8>>) -> eyre::Result<Vec<String>> 
     status.push_str(req.method().to_string().as_ref());
     status.push(' ');
     status.push_str(req.uri().path());
+    if let Some(s) = req.uri().query() {
+        status.push('?');
+        status.push_str(s);
+    }
 
     res.push(status);
 
@@ -71,12 +75,8 @@ pub fn imprint_lines(req: &mut hyper::Request<Vec<u8>>, lines: Vec<String>) -> e
 }
 
 fn extract_status(uri: &Uri, lines: &str) -> eyre::Result<(hyper::Method, hyper::Uri)> {
-    let Some((method, rest)) = lines.split_once(' ') else {
+    let Some((method, path)) = lines.split_once(' ') else {
         eyre::bail!("invalid http method");
-    };
-
-    let Some((path, _)) = rest.split_once(' ') else {
-        eyre::bail!("invalid http path");
     };
 
     let method = hyper::Method::from_str(method)?;
@@ -91,6 +91,8 @@ fn extract_status(uri: &Uri, lines: &str) -> eyre::Result<(hyper::Method, hyper:
     }
 
     let uri = builder.path_and_query(path).build()?;
+
+    log::debug!("modiified {method:?} {uri:?}");
 
     Ok((method, uri))
 }

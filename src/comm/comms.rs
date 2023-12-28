@@ -1,5 +1,5 @@
 use self::lines::{imprint_lines, req_to_lines};
-use super::{windower::DimTracker, Buffer, Neovim, Value};
+use super::{windower::DimTracker, Buffer, Neovim, Value, Window};
 use crate::hist::{Request, Response};
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -12,6 +12,7 @@ pub struct NvimComms {
     list: Buffer,
     detail: Buffer,
     intercept: Buffer,
+    intercept_win: Option<Window>,
 
     backlog: intercept::Backlog,
     editing: bool,
@@ -49,6 +50,7 @@ impl NvimComms {
             list,
             detail,
             intercept,
+            intercept_win: None,
             backlog,
             editing: false,
             namespace,
@@ -131,7 +133,7 @@ impl NvimComms {
     }
 
     pub async fn show_detail(
-        &self,
+        &mut self,
         _id: usize,
         req: &Request,
         res: Option<&Response>,
@@ -172,21 +174,23 @@ impl NvimComms {
         let (width, height, lines) = dim.take();
         self.detail.set_lines(0, -1, false, lines).await?;
 
-        self.nvim
-            .open_win(
-                &self.detail,
-                true,
-                vec![
-                    ("relative".into(), "cursor".into()),
-                    ("style".into(), "minimal".into()),
-                    ("row".into(), 0.into()),
-                    ("col".into(), 0.into()),
-                    ("height".into(), height.into()),
-                    ("width".into(), width.into()),
-                    ("border".into(), "rounded".into()),
-                ],
-            )
-            .await?;
+        self.intercept_win = Some(
+            self.nvim
+                .open_win(
+                    &self.detail,
+                    true,
+                    vec![
+                        ("relative".into(), "cursor".into()),
+                        ("style".into(), "minimal".into()),
+                        ("row".into(), 0.into()),
+                        ("col".into(), 0.into()),
+                        ("height".into(), height.into()),
+                        ("width".into(), width.into()),
+                        ("border".into(), "rounded".into()),
+                    ],
+                )
+                .await?,
+        );
 
         Ok(())
     }
@@ -201,6 +205,7 @@ impl NvimComms {
             log::debug!("pushing intercept backlog");
             self.backlog.push_backlog(lines);
         } else {
+            self.backlog.push_current();
             log::debug!("displaying intercept");
             self.intercept.set_lines(0, -1, false, lines).await?;
 
@@ -222,6 +227,8 @@ impl NvimComms {
                     ],
                 )
                 .await?;
+
+            self.editing = true;
         }
 
         Ok((self.backlog.req_index(), self.backlog.notify()))
@@ -242,10 +249,23 @@ impl NvimComms {
 
         imprint_lines(req, lines)?;
 
+        if let Some(backlog) = self.backlog.pop() {
+            self.intercept.set_lines(0, -1, false, backlog).await?;
+        } else {
+            self.editing = false;
+            if let Some(win) = &self.intercept_win {
+                win.close(true).await?;
+            }
+
+            self.intercept_win = None;
+        }
+
         Ok(true)
     }
 
     pub async fn submit_intercept(&mut self) -> eyre::Result<()> {
+        log::debug!("backlog: {:?}", self.backlog);
+
         log::debug!("notifying waiting green threads");
         self.backlog.notify().notify_waiters();
 

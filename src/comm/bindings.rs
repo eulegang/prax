@@ -33,6 +33,8 @@ pub async fn intercept_request(req: &mut hyper::Request<Vec<u8>>) -> eyre::Resul
         }
     };
 
+    log::debug!("waiting on tick = {tick}");
+
     loop {
         notify.notified().await;
 
