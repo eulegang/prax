@@ -3,8 +3,7 @@ focus()
 target('localhost:8000')
     :req(
       set_header("Authorization", "Bearer xyz"),
-      dump,
-      intercept
+      dump
     )
     :resp(
       set_header("X-AttackProxy", "set"),
@@ -14,10 +13,9 @@ target('localhost:8000')
 target('localhost:3000')
     :req(
       set_header("Authorization", "Bearer xyz"),
-      dump,
-      intercept
+      dump
     )
     :resp(
       set_header("X-AttackProxy", "set"),
-      dump
+      dump,
     )
