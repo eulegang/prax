@@ -1,3 +1,4 @@
+use config::Config;
 use hist::History;
 use once_cell::sync::Lazy;
 use std::{fs::File, sync::Arc};
@@ -5,18 +6,18 @@ use tokio_util::sync::CancellationToken;
 
 use clap::Parser;
 use log::LevelFilter;
-use proxy::Proxy;
-use tokio::sync::{Mutex, RwLock};
+//use proxy::Proxy;
+use tokio::sync::RwLock;
 
 mod cli;
 mod comm;
 mod config;
 mod hist;
-mod proxy;
+//mod proxy;
 mod srv;
 
 static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
-static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
+//static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> eyre::Result<()> {
@@ -36,20 +37,20 @@ async fn main() -> eyre::Result<()> {
         pretty_env_logger::init()
     }
 
-    if let Some(path) = cli.configure {
-        config::config(path)?
+    let config = if let Some(path) = cli.configure {
+        Config::load(path)?
+    } else {
+        Config::default()
     };
 
     let token = CancellationToken::new();
-
-    let hist = Mutex::new(History::default());
 
     if let Some(nvim) = cli.nvim {
         let token = token.clone();
         tokio::spawn(async { comm::main(nvim, token).await });
     }
 
-    let server = srv::Server::new(cli.listen, token, (), ());
+    let server = srv::Server::new(cli.listen, token, config, ());
     server.listen().await?;
 
     Ok(())

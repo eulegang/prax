@@ -4,7 +4,7 @@ use futures::Future;
 use tokio::io;
 use tokio_util::sync::CancellationToken;
 
-mod srv;
+//mod srv;
 
 mod listen;
 mod null;
@@ -16,11 +16,15 @@ pub type Res<T> = hyper::Response<T>;
 /// A trait for modifying in flight requests
 #[allow(async_fn_in_trait)]
 pub trait Filter {
-    fn modify_request(&self, req: &mut Req<Vec<u8>>)
-        -> impl Future<Output = io::Result<()>> + Send;
+    fn modify_request(
+        &self,
+        hostname: &str,
+        req: &mut Req<Vec<u8>>,
+    ) -> impl Future<Output = io::Result<()>> + Send;
 
     fn modify_response(
         &self,
+        hostname: &str,
         req: &mut Res<Vec<u8>>,
     ) -> impl Future<Output = io::Result<()>> + Send;
 }
@@ -34,7 +38,7 @@ pub trait Scribe {
     fn report_response(
         &self,
         ticket: Self::Ticket,
-        req: &Res<Vec<u8>>,
+        res: &Res<Vec<u8>>,
     ) -> impl Future<Output = ()> + Send;
 }
 

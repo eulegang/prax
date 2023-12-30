@@ -56,10 +56,10 @@ where
         Box::pin(async move {
             let mut req = collect_req(req).await?;
 
-            filter.modify_request(&mut req).await?;
+            filter.modify_request(&lookup, &mut req).await?;
             let ticket = scribe.report_request(&req).await;
 
-            let stream = TcpStream::connect(lookup).await.unwrap();
+            let stream = TcpStream::connect(&lookup).await.unwrap();
             let io = TokioIo::new(stream);
 
             let (mut sender, conn) = Builder::new().handshake::<_, Full<Bytes>>(io).await?;
@@ -79,7 +79,7 @@ where
             let res = sender.send_request(req.map(|b| b.into())).await?;
             let mut res = collect_res(res).await?;
 
-            filter.modify_response(&mut res).await?;
+            filter.modify_response(&lookup, &mut res).await?;
             scribe.report_response(ticket, &res);
 
             Ok(res.map(|b| b.into()))

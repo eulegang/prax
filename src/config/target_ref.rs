@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use mlua::{FromLua, Lua, Result, UserData, Variadic};
 
-use crate::PROXY;
-
-use super::{ConfError, Rule};
+use super::{ConfError, Rule, UProxy};
 
 #[derive(FromLua, Clone)]
 pub struct TargetRef {
@@ -23,10 +21,11 @@ impl UserData for TargetRef {
 }
 
 async fn target_ref_req(
-    _: &Lua,
+    lua: &Lua,
     (target, rules): (TargetRef, Variadic<Rule>),
 ) -> Result<TargetRef> {
-    let mut proxy = PROXY.write().await;
+    let lock = lua.app_data_ref::<UProxy>().unwrap();
+    let mut proxy = lock.lock().await;
 
     let t = proxy
         .targets
@@ -46,10 +45,11 @@ async fn target_ref_req(
 }
 
 async fn target_ref_resp(
-    _: &Lua,
+    lua: &Lua,
     (target, rules): (TargetRef, Variadic<Rule>),
 ) -> Result<TargetRef> {
-    let mut proxy = PROXY.write().await;
+    let lock = lua.app_data_ref::<UProxy>().unwrap();
+    let mut proxy = lock.lock().await;
 
     let t = proxy
         .targets

@@ -1,11 +1,10 @@
 use mlua::{Lua, Result};
 
-use crate::{proxy::Target, PROXY};
+use super::{Rule, Target, TargetRef, UProxy};
 
-use super::{Rule, TargetRef};
-
-pub async fn target(_: &Lua, (hostname,): (String,)) -> Result<TargetRef> {
-    let mut proxy = PROXY.write().await;
+pub async fn target(lua: &Lua, (hostname,): (String,)) -> Result<TargetRef> {
+    let lock = lua.app_data_ref::<UProxy>().unwrap();
+    let mut proxy = lock.lock().await;
     log::info!("Targeting {}", &hostname);
 
     let r = TargetRef {
@@ -21,8 +20,9 @@ pub async fn target(_: &Lua, (hostname,): (String,)) -> Result<TargetRef> {
     Ok(r)
 }
 
-pub async fn focus(_: &Lua, (): ()) -> Result<()> {
-    let mut proxy = PROXY.write().await;
+pub async fn focus(lua: &Lua, (): ()) -> Result<()> {
+    let lock = lua.app_data_ref::<UProxy>().unwrap();
+    let mut proxy = lock.lock().await;
     proxy.focus = true;
     Ok(())
 }
