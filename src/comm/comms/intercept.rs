@@ -24,7 +24,7 @@ impl Backlog {
 
         self.current = Some(send);
 
-        return recv;
+        recv
     }
 
     pub fn notify(&mut self, lines: Vec<String>) {

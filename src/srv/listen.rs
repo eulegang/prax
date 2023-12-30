@@ -1,0 +1,54 @@
+use std::sync::Arc;
+
+use super::{Filter, Scribe, Server};
+use hyper::server::conn::http1;
+use tokio::{io, net::TcpSocket};
+
+use hyper_util::rt::TokioIo;
+
+impl<F, S> Server<F, S>
+where
+    F: Filter + Sync + Send + 'static,
+    S: Scribe + Sync + Send + 'static,
+{
+    pub async fn listen(self) -> Result<(), io::Error> {
+        let socket = TcpSocket::new_v4()?;
+        socket.bind(self.addr)?;
+        socket.set_reuseaddr(true)?;
+        socket.set_reuseport(true)?;
+
+        let listener = socket.listen(1024)?;
+        let token = self.token.clone();
+
+        let service = Arc::new(self);
+
+        loop {
+            tokio::select! {
+                _ = token.cancelled() => {
+                    return Ok(())
+                }
+
+                res = listener.accept() => {
+                    let (stream, _) = res?;
+
+                    let io = TokioIo::new(stream);
+
+                    let token = token.clone();
+
+                    let srv = service.clone();
+
+                    tokio::task::spawn(async move {
+                        tokio::select! {
+                            _ = token.cancelled() => { }
+                            res = http1::Builder::new().serve_connection(io, srv.as_ref()) => {
+                                if let Err(err) = res {
+                                    log::error!("Error service connection: {:?}", err);
+                                }
+                            }
+                        }
+                    });
+                }
+            };
+        }
+    }
+}

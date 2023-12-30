@@ -6,14 +6,14 @@ use tokio_util::sync::CancellationToken;
 use clap::Parser;
 use log::LevelFilter;
 use proxy::Proxy;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 mod cli;
 mod comm;
 mod config;
 mod hist;
-mod listen;
 mod proxy;
+mod srv;
 
 static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
 static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
@@ -42,12 +42,15 @@ async fn main() -> eyre::Result<()> {
 
     let token = CancellationToken::new();
 
+    let hist = Mutex::new(History::default());
+
     if let Some(nvim) = cli.nvim {
         let token = token.clone();
         tokio::spawn(async { comm::main(nvim, token).await });
     }
 
-    listen::listen(cli.listen, token).await?;
+    let server = srv::Server::new(cli.listen, token, (), ());
+    server.listen().await?;
 
     Ok(())
 }
