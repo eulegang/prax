@@ -1,9 +1,6 @@
 use hyper::header::{HeaderName, HeaderValue};
 
-use crate::{
-    comm::{intercept_request, intercept_response},
-    srv::Filter,
-};
+use crate::srv::{Filter, Result};
 
 use super::{Config, Rule};
 
@@ -14,7 +11,7 @@ impl Filter for Config {
         &self,
         hostname: &str,
         req: &mut crate::srv::Req<Vec<u8>>,
-    ) -> tokio::io::Result<()> {
+    ) -> Result<()> {
         let proxy = self.proxy.lock().await;
 
         log::debug!("applying request rules to {hostname}");
@@ -41,13 +38,23 @@ impl Filter for Config {
                     }
                 }
 
-                Rule::Intercept => match intercept_request(req).await {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        log::warn!("can not sent to intercepter");
+                Rule::Intercept => match self.nvim.as_ref() {
+                    Some(nvim) => {
+                        let lines = {
+                            let nvim = nvim.lock().await;
+                            let mut view = nvim.view.lock().await;
+                            view.intercept_request(req).await?
+                        };
+
+                        let lines = lines.await?;
+                        {
+                            let nvim = nvim.lock().await;
+                            let mut view = nvim.view.lock().await;
+                            if view.retrieve_intercept_request(lines, req).await? {}
+                        }
                     }
-                    Err(e) => {
-                        log::error!("failed to intercept: {e}");
+                    None => {
+                        log::warn!("can not send to intercepter");
                     }
                 },
 
@@ -67,7 +74,7 @@ impl Filter for Config {
         &self,
         hostname: &str,
         res: &mut crate::srv::Res<Vec<u8>>,
-    ) -> tokio::io::Result<()> {
+    ) -> Result<()> {
         let proxy = self.proxy.lock().await;
 
         log::debug!("applying request rules to {hostname}");
@@ -98,13 +105,23 @@ impl Filter for Config {
                     }
                 }
 
-                Rule::Intercept => match intercept_response(res).await {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        log::warn!("can not sent to intercepter");
+                Rule::Intercept => match self.nvim.as_ref() {
+                    Some(nvim) => {
+                        let lines = {
+                            let nvim = nvim.lock().await;
+                            let mut view = nvim.view.lock().await;
+                            view.intercept_response(res).await?
+                        };
+
+                        let lines = lines.await?;
+                        {
+                            let nvim = nvim.lock().await;
+                            let mut view = nvim.view.lock().await;
+                            if view.retrieve_intercept_response(lines, res).await? {}
+                        }
                     }
-                    Err(e) => {
-                        log::error!("failed to intercept: {e}");
+                    None => {
+                        log::warn!("can not send to intercepter");
                     }
                 },
 

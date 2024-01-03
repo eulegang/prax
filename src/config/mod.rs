@@ -12,6 +12,8 @@ mod filter;
 pub use err::ConfError;
 pub use target_ref::TargetRef;
 
+use crate::nvim::NVim;
+
 #[derive(Default)]
 pub struct Proxy {
     pub targets: Vec<Target>,
@@ -38,6 +40,7 @@ type UProxy = Arc<Mutex<Proxy>>;
 pub struct Config {
     proxy: UProxy,
     lua: Arc<Mutex<Lua>>,
+    nvim: Arc<Option<Mutex<NVim>>>,
 }
 
 // TODO: remove

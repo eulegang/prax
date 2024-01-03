@@ -3,10 +3,12 @@ use std::{path::PathBuf, sync::Arc};
 use mlua::Lua;
 use tokio::sync::Mutex;
 
+use crate::nvim::NVim;
+
 use super::{globals, Config, Proxy, Rule};
 
 impl Config {
-    pub fn load(path: PathBuf) -> eyre::Result<Self> {
+    pub fn load(path: PathBuf, nvim: Arc<Option<Mutex<NVim>>>) -> eyre::Result<Self> {
         let content = std::fs::read_to_string(path)?;
 
         let proxy = Arc::new(Mutex::new(Proxy::default()));
@@ -33,6 +35,6 @@ impl Config {
         chunk.exec()?;
 
         let lua = Arc::new(Mutex::new(lua));
-        Ok(Config { proxy, lua })
+        Ok(Config { proxy, lua, nvim })
     }
 }

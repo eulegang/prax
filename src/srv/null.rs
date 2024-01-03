@@ -1,11 +1,19 @@
 use super::{Filter, Scribe};
 
 impl Filter for () {
-    async fn modify_request(&self, _: &str, _: &mut super::Req<Vec<u8>>) -> tokio::io::Result<()> {
+    async fn modify_request(
+        &self,
+        _: &str,
+        _: &mut super::Req<Vec<u8>>,
+    ) -> Result<(), super::service::Error> {
         Ok(())
     }
 
-    async fn modify_response(&self, _: &str, _: &mut super::Res<Vec<u8>>) -> tokio::io::Result<()> {
+    async fn modify_response(
+        &self,
+        _: &str,
+        _: &mut super::Res<Vec<u8>>,
+    ) -> Result<(), super::service::Error> {
         Ok(())
     }
 }

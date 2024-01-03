@@ -8,15 +8,18 @@ use crate::{cli::NvimConnInfo, hist::History};
 use self::{handler::Handler, view::View};
 
 mod handler;
+mod intercept;
 mod io;
+mod lines;
 mod view;
+mod windower;
 
 pub(crate) type Neovim = nvim_rs::Neovim<io::IoConn>;
 pub(crate) type Buffer = nvim_rs::Buffer<io::IoConn>;
 pub(crate) type Window = nvim_rs::Window<io::IoConn>;
 
 pub struct NVim {
-    view: Arc<Mutex<View>>,
+    pub view: Arc<Mutex<View>>,
 }
 
 impl NVim {

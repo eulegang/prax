@@ -17,7 +17,7 @@ use tokio::net::TcpStream;
 
 use super::{Filter, Req, Res, Scribe, Server};
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -26,6 +26,36 @@ pub enum Error {
 
     #[error("hyper error \"{0}\"")]
     Hyper(#[from] hyper::Error),
+
+    #[error("hyper error \"{0}\"")]
+    HttpHyper(#[from] hyper::http::Error),
+
+    #[error("failed to call nvim funciton \"{0}\"")]
+    Nvim(#[from] Box<nvim_rs::error::CallError>),
+
+    #[error("Failed to recieve channel item error")]
+    TokioRecv(#[from] tokio::sync::oneshot::error::RecvError),
+
+    #[error("Intercept does not conform to format")]
+    InterceptMalformed,
+
+    #[error("Invalid status code")]
+    StatusCode(#[from] hyper::http::status::InvalidStatusCode),
+
+    #[error("Invalid invalid header name")]
+    HeaderName(#[from] hyper::header::InvalidHeaderName),
+
+    #[error("Invalid invalid header value")]
+    HeaderValue(#[from] hyper::header::InvalidHeaderValue),
+
+    #[error("Invalid invalid method")]
+    Method(#[from] hyper::http::method::InvalidMethod),
+
+    #[error("Failed to parse utf-8")]
+    Body(#[from] std::str::Utf8Error),
+
+    #[error("Failed to marshal header")]
+    HeaderMarshal(#[from] hyper::header::ToStrError),
 }
 
 impl<F, S> Service<Req<Incoming>> for &Server<F, S>

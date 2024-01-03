@@ -10,7 +10,7 @@ use log::LevelFilter;
 use tokio::sync::{Mutex, RwLock};
 
 mod cli;
-mod comm;
+//mod comm;
 mod config;
 mod hist;
 //mod proxy;
@@ -40,20 +40,25 @@ async fn main() -> eyre::Result<()> {
     }
 
     let hist = Arc::new(Mutex::new(hist::History::default()));
-    let winner = hist::Winner::new(hist);
-
-    let config = if let Some(path) = cli.configure {
-        Config::load(path)?
-    } else {
-        Config::default()
-    };
+    let winner = hist::Winner::new(hist.clone());
 
     let token = CancellationToken::new();
 
-    if let Some(nvim) = cli.nvim {
+    let nvim = if let Some(nvim) = cli.nvim {
         let token = token.clone();
-        tokio::spawn(async { comm::main(nvim, token).await });
-    }
+
+        Arc::new(Some(Mutex::new(
+            nvim::NVim::connect(nvim, token, hist.clone()).await?,
+        )))
+    } else {
+        Arc::new(None)
+    };
+
+    let config = if let Some(path) = cli.configure {
+        Config::load(path, nvim)?
+    } else {
+        Config::default()
+    };
 
     let server = srv::Server::new(cli.listen, token, config, winner);
     server.listen().await?;
