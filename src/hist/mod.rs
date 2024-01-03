@@ -1,11 +1,15 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, sync::Arc};
 
 mod body;
+mod conv;
 mod deser;
+//mod store;
 
 pub use body::Body;
+use tokio::sync::Mutex;
+
+use crate::srv::Scribe;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Request {
@@ -64,61 +68,28 @@ impl History {
     }
 }
 
-impl From<&hyper::Request<Vec<u8>>> for Request {
-    fn from(value: &hyper::Request<Vec<u8>>) -> Self {
-        let method = value.method().to_string();
-        let path = value.uri().path().to_string();
-        let version = format!("{:?}", value.version());
+pub struct Winner {
+    history: Arc<Mutex<History>>,
+}
 
-        let mut headers = HashMap::new();
-        let mut query = HashMap::new();
-
-        for (key, value) in value.headers() {
-            if let Ok(s) = value.to_str() {
-                headers.insert(key.to_string(), s.to_string());
-            }
-        }
-
-        if let Some(q) = value.uri().path_and_query() {
-            if let Some(q) = q.query() {
-                for kv in q.split('&') {
-                    if let Some((key, value)) = kv.split_once('=') {
-                        query.insert(key.to_string(), value.to_string());
-                    }
-                }
-            }
-        }
-
-        let body = value.body().clone().into();
-
-        Request {
-            method,
-            path,
-            query,
-            version,
-            headers,
-            body,
-        }
+impl Winner {
+    pub fn new(history: Arc<Mutex<History>>) -> Self {
+        Winner { history }
     }
 }
 
-impl From<&hyper::Response<Vec<u8>>> for Response {
-    fn from(value: &hyper::Response<Vec<u8>>) -> Self {
-        let status = value.status().as_u16();
+impl Scribe for Winner {
+    type Ticket = usize;
 
-        let mut headers = HashMap::new();
-        for (key, value) in value.headers() {
-            if let Ok(s) = value.to_str() {
-                headers.insert(key.to_string(), s.to_string());
-            }
-        }
+    async fn report_request(&self, req: &crate::srv::Req<Vec<u8>>) -> Self::Ticket {
+        let req = Request::from(req);
+        let mut hist = self.history.lock().await;
+        hist.request(req)
+    }
 
-        let body = value.body().clone().into();
-
-        Response {
-            status,
-            headers,
-            body,
-        }
+    async fn report_response(&self, ticket: Self::Ticket, res: &crate::srv::Res<Vec<u8>>) {
+        let res = Response::from(res);
+        let mut hist = self.history.lock().await;
+        hist.response(ticket, res);
     }
 }

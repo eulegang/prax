@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 use clap::Parser;
 use log::LevelFilter;
 //use proxy::Proxy;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 mod cli;
 mod comm;
@@ -16,7 +16,9 @@ mod hist;
 //mod proxy;
 mod srv;
 
-static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
+mod nvim;
+
+//static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
 //static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
@@ -37,6 +39,9 @@ async fn main() -> eyre::Result<()> {
         pretty_env_logger::init()
     }
 
+    let hist = Arc::new(Mutex::new(hist::History::default()));
+    let winner = hist::Winner::new(hist);
+
     let config = if let Some(path) = cli.configure {
         Config::load(path)?
     } else {
@@ -50,7 +55,7 @@ async fn main() -> eyre::Result<()> {
         tokio::spawn(async { comm::main(nvim, token).await });
     }
 
-    let server = srv::Server::new(cli.listen, token, config, ());
+    let server = srv::Server::new(cli.listen, token, config, winner);
     server.listen().await?;
 
     Ok(())

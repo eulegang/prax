@@ -2,7 +2,7 @@ use super::{io::IoConn, submit_intercept};
 use tokio_util::sync::CancellationToken;
 
 use super::COMMS;
-use crate::HIST;
+//use crate::HIST;
 
 use super::Neovim;
 use nvim_rs::Value;
@@ -23,6 +23,7 @@ impl nvim_rs::Handler for Handler {
     type Writer = IoConn;
 
     async fn handle_notify(&self, name: String, _: Vec<Value>, _: Neovim) {
+        /*
         match name.as_str() {
             "shutdown" => self.token.cancel(),
             "detail" => {
@@ -57,5 +58,6 @@ impl nvim_rs::Handler for Handler {
             }
             _ => (),
         }
+        */
     }
 }
