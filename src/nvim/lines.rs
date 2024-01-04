@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{convert::Infallible, str::FromStr};
 
 use hyper::{
     header::{HeaderName, HeaderValue},
@@ -7,93 +7,227 @@ use hyper::{
 
 use crate::srv;
 
-pub fn req_to_lines(req: &hyper::Request<Vec<u8>>) -> srv::Result<Vec<String>> {
-    let mut res = Vec::new();
+pub trait ToLines {
+    type Error: std::error::Error;
 
-    let mut status = String::new();
-
-    status.push_str(req.method().to_string().as_ref());
-    status.push(' ');
-    status.push_str(req.uri().path());
-    if let Some(s) = req.uri().query() {
-        status.push('?');
-        status.push_str(s);
-    }
-
-    res.push(status);
-
-    for (k, v) in req.headers() {
-        res.push(format!("{}: {}", k, v.to_str()?));
-    }
-
-    res.push(String::new());
-
-    let body = std::str::from_utf8(req.body())?;
-
-    for line in body.lines() {
-        res.push(line.to_string());
-    }
-
-    Ok(res)
+    fn to_lines(&self) -> Result<Vec<String>, Self::Error>;
 }
 
-pub fn resp_to_lines(resp: &hyper::Response<Vec<u8>>) -> srv::Result<Vec<String>> {
-    let mut res = Vec::new();
+pub trait LinesImprint {
+    type Error: std::error::Error;
 
-    res.push(resp.status().as_u16().to_string());
-
-    for (k, v) in resp.headers() {
-        res.push(format!("{}: {}", k, v.to_str()?));
-    }
-
-    res.push(String::new());
-
-    let body = std::str::from_utf8(resp.body())?;
-
-    for line in body.lines() {
-        res.push(line.to_string());
-    }
-
-    Ok(res)
+    fn imprint(&mut self, lines: Vec<String>) -> Result<(), Self::Error>;
 }
 
-pub fn imprint_lines(req: &mut hyper::Request<Vec<u8>>, lines: Vec<String>) -> srv::Result<()> {
-    let Some(status) = lines.get(0) else {
-        return Err(srv::Error::InterceptMalformed);
-    };
+impl ToLines for hyper::Request<Vec<u8>> {
+    type Error = srv::Error;
 
-    let (method, uri) = extract_status(req.uri(), status)?;
+    fn to_lines(&self) -> Result<Vec<String>, Self::Error> {
+        let mut res = Vec::new();
 
-    let mut headermap = HeaderMap::new();
-    let mut i = 1;
-    for line in lines.iter().skip(1) {
-        if line.is_empty() {
-            break;
+        let mut status = String::new();
+
+        status.push_str(self.method().to_string().as_ref());
+        status.push(' ');
+        status.push_str(self.uri().path());
+        if let Some(s) = self.uri().query() {
+            status.push('?');
+            status.push_str(s);
         }
 
-        if let Some((name, value)) = line.split_once(':') {
-            let name = HeaderName::from_str(name)?;
-            let value = HeaderValue::from_str(value)?;
+        res.push(status);
 
-            headermap.insert(name, value);
+        for (k, v) in self.headers() {
+            res.push(format!("{}: {}", k, v.to_str()?));
         }
 
-        i += 1;
+        res.push(String::new());
+
+        let body = std::str::from_utf8(self.body())?;
+
+        for line in body.lines() {
+            res.push(line.to_string());
+        }
+
+        Ok(res)
     }
+}
 
-    let mut body = Vec::new();
+impl ToLines for crate::hist::Request {
+    type Error = Infallible;
 
-    for line in &lines[i..] {
-        body.extend_from_slice(line.as_bytes());
-        body.push(b'\n');
+    fn to_lines(&self) -> Result<Vec<String>, Self::Error> {
+        let mut res = Vec::new();
+        let mut status = String::new();
+
+        status.push_str(&self.method);
+        status.push(' ');
+        status.push_str(&self.path);
+
+        let mut query = String::new();
+        for (k, v) in &self.query {
+            if !query.is_empty() {
+                query.push('&');
+            }
+
+            query.push_str(&k);
+            query.push('=');
+            query.push_str(&v);
+        }
+
+        if !query.is_empty() {
+            status.push('?');
+            status.push_str(&query);
+        }
+
+        res.push(status);
+
+        for (k, v) in &self.headers {
+            res.push(format!("{}: {}", k, v));
+        }
+
+        res.push(String::new());
+
+        if let Some(lines) = self.body.lines() {
+            for line in lines {
+                res.push(line.to_string());
+            }
+        }
+
+        Ok(res)
     }
+}
 
-    *req.method_mut() = method;
-    *req.uri_mut() = uri;
-    *req.headers_mut() = headermap;
-    *req.body_mut() = body;
+impl ToLines for hyper::Response<Vec<u8>> {
+    type Error = srv::Error;
 
-    Ok(())
+    fn to_lines(&self) -> Result<Vec<String>, Self::Error> {
+        let mut res = Vec::new();
+
+        res.push(self.status().as_u16().to_string());
+
+        for (k, v) in self.headers() {
+            res.push(format!("{}: {}", k, v.to_str()?));
+        }
+
+        res.push(String::new());
+
+        let body = std::str::from_utf8(self.body())?;
+
+        for line in body.lines() {
+            res.push(line.to_string());
+        }
+
+        Ok(res)
+    }
+}
+impl ToLines for crate::hist::Response {
+    type Error = Infallible;
+
+    fn to_lines(&self) -> Result<Vec<String>, Self::Error> {
+        let mut res = Vec::new();
+
+        res.push(self.status.to_string());
+
+        for (k, v) in &self.headers {
+            res.push(format!("{}: {}", k, v));
+        }
+
+        res.push(String::new());
+
+        if let Some(lines) = self.body.lines() {
+            for line in lines {
+                res.push(line.to_string());
+            }
+        }
+
+        Ok(res)
+    }
+}
+
+impl LinesImprint for hyper::Request<Vec<u8>> {
+    type Error = srv::Error;
+
+    fn imprint(&mut self, lines: Vec<String>) -> Result<(), Self::Error> {
+        let Some(status) = lines.get(0) else {
+            return Err(srv::Error::InterceptMalformed);
+        };
+
+        let (method, uri) = extract_status(self.uri(), status)?;
+
+        let mut headermap = HeaderMap::new();
+        let mut i = 1;
+        for line in lines.iter().skip(1) {
+            if line.is_empty() {
+                break;
+            }
+
+            if let Some((name, value)) = line.split_once(':') {
+                let name = HeaderName::from_str(name)?;
+                let value = HeaderValue::from_str(value)?;
+
+                headermap.insert(name, value);
+            }
+
+            i += 1;
+        }
+
+        let mut body = Vec::new();
+
+        for line in &lines[i..] {
+            body.extend_from_slice(line.as_bytes());
+            body.push(b'\n');
+        }
+
+        *self.method_mut() = method;
+        *self.uri_mut() = uri;
+        *self.headers_mut() = headermap;
+        *self.body_mut() = body;
+
+        Ok(())
+    }
+}
+
+impl LinesImprint for hyper::Response<Vec<u8>> {
+    type Error = srv::Error;
+
+    fn imprint(&mut self, lines: Vec<String>) -> Result<(), Self::Error> {
+        let Some(status) = lines.get(0) else {
+            return Err(srv::Error::InterceptMalformed);
+        };
+
+        let code = StatusCode::from_str(status)?;
+
+        let mut headermap = HeaderMap::new();
+        let mut i = 1;
+        for line in lines.iter().skip(1) {
+            if line.is_empty() {
+                break;
+            }
+
+            if let Some((name, value)) = line.split_once(':') {
+                let name = HeaderName::from_str(name)?;
+                let value = HeaderValue::from_str(value)?;
+
+                headermap.insert(name, value);
+            }
+
+            i += 1;
+        }
+
+        let mut body = Vec::new();
+
+        for line in &lines[i..] {
+            body.extend_from_slice(line.as_bytes());
+            body.push(b'\n');
+        }
+
+        *self.status_mut() = code;
+        *self.headers_mut() = headermap;
+        *self.body_mut() = body;
+
+        Ok(())
+    }
 }
 
 fn extract_status(uri: &Uri, lines: &str) -> srv::Result<(hyper::Method, hyper::Uri)> {
@@ -117,45 +251,4 @@ fn extract_status(uri: &Uri, lines: &str) -> srv::Result<(hyper::Method, hyper::
     log::debug!("modiified {method:?} {uri:?}");
 
     Ok((method, uri))
-}
-
-pub fn imprint_lines_resp(
-    resp: &mut hyper::Response<Vec<u8>>,
-    lines: Vec<String>,
-) -> srv::Result<()> {
-    let Some(status) = lines.get(0) else {
-        return Err(srv::Error::InterceptMalformed);
-    };
-
-    let code = StatusCode::from_str(status)?;
-
-    let mut headermap = HeaderMap::new();
-    let mut i = 1;
-    for line in lines.iter().skip(1) {
-        if line.is_empty() {
-            break;
-        }
-
-        if let Some((name, value)) = line.split_once(':') {
-            let name = HeaderName::from_str(name)?;
-            let value = HeaderValue::from_str(value)?;
-
-            headermap.insert(name, value);
-        }
-
-        i += 1;
-    }
-
-    let mut body = Vec::new();
-
-    for line in &lines[i..] {
-        body.extend_from_slice(line.as_bytes());
-        body.push(b'\n');
-    }
-
-    *resp.status_mut() = code;
-    *resp.headers_mut() = headermap;
-    *resp.body_mut() = body;
-
-    Ok(())
 }

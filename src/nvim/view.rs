@@ -1,82 +1,31 @@
+use nvim_rs::{error::CallError, Value};
 use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
+use tokio_util::sync::CancellationToken;
 
-use nvim_rs::Value;
-use tokio::sync::{oneshot::Receiver, Mutex};
-
-use crate::{
-    hist::{History, Request, Response},
-    nvim::{
-        lines::{imprint_lines, imprint_lines_resp},
-        windower::DimTracker,
-    },
-    srv,
-};
-
-use super::{
-    handler::Event,
-    intercept::Backlog,
-    lines::{req_to_lines, resp_to_lines},
-    Buffer, Neovim, Window,
-};
+use super::{Buffer, Neovim, Window};
 
 pub struct View {
     neovim: Neovim,
-    history: Arc<Mutex<History>>,
-
     list: Buffer,
     detail: Buffer,
     intercept: Buffer,
+
     intercept_win: Option<Window>,
 
-    backlog: Backlog,
-    editing: bool,
     namespace: i64,
 }
 
 impl View {
-    pub async fn handle_event(&mut self, event: Event) {
-        match event {
-            Event::Detail => {
-                let (line, req, res) = {
-                    let hist = self.history.lock().await;
-
-                    match self.find_line().await {
-                        Ok(line) => match hist.entry(line as usize) {
-                            Some(entry) => {
-                                (line.clone(), entry.request.clone(), entry.response.clone())
-                            }
-                            None => {
-                                log::error!("No history line");
-                                return;
-                            }
-                        },
-                        Err(e) => {
-                            log::error!("failed to find_line: {e}");
-                            return;
-                        }
-                    }
-                };
-
-                if let Err(err) = self.show_detail(line as usize, &req, res.as_ref()).await {
-                    log::error!("failed to show detail {err}")
-                }
-            }
-
-            Event::SubmitIntercept => {
-                if let Err(e) = self.submit_intercept().await {
-                    log::error!("failed to submit intercept: {e}");
-                };
-            }
-        }
-    }
-
-    pub async fn new(neovim: Neovim, history: Arc<Mutex<History>>) -> eyre::Result<Self> {
+    pub async fn new(
+        neovim: Neovim,
+        cancel: CancellationToken,
+    ) -> eyre::Result<(Arc<Mutex<Self>>, mpsc::Sender<ViewOp>)> {
         let list = neovim.create_buf(true, true).await?;
         let detail = neovim.create_buf(false, true).await?;
         let intercept = neovim.create_buf(false, true).await?;
         list.set_name("atkpx").await?;
         let intercept_win = None;
-
         let namespace = neovim.create_namespace("atkpx").await?;
 
         intercept
@@ -94,74 +43,116 @@ impl View {
         list.set_keymap("n", "<cr>", ":lua require(\"atkpx\").detail()<cr>", vec![])
             .await?;
 
-        let backlog = Backlog::default();
-        let editing = false;
-
-        Ok(Self {
+        let s = Self {
             neovim,
-            history,
             list,
             detail,
             intercept,
             intercept_win,
-            backlog,
-            editing,
             namespace,
-        })
+        };
+
+        let handler = Arc::new(Mutex::new(s));
+        let res = handler.clone();
+
+        let (send, mut recv) = mpsc::channel(16);
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        break;
+                    }
+
+                    next = recv.recv() => {
+                        if let Some(op) = next {
+                            let mut view = handler.lock().await;
+
+                            view.handle(op).await;
+                        } else {
+                            break;
+                        }
+
+                    }
+
+                }
+            }
+        });
+
+        Ok((res, send))
     }
 
-    pub async fn report_req(&self, id: usize, req: &Request) -> eyre::Result<()> {
+    pub async fn find_line(&self) -> eyre::Result<i64> {
+        let win = self.neovim.get_current_win().await?;
+        let buf = win.get_buf().await?;
+
+        if buf == self.list {
+            let (line, _) = win.get_cursor().await?;
+
+            Ok(line)
+        } else {
+            eyre::bail!("list is not the current window")
+        }
+    }
+
+    pub async fn intercept_buffer(&self) -> Result<Vec<String>, Box<CallError>> {
+        Ok(self.intercept.get_lines(0, -1, true).await?)
+    }
+
+    async fn handle(&mut self, op: ViewOp) {
+        let res = match op {
+            ViewOp::NewRequest {
+                entry,
+                method,
+                path,
+            } => self.handle_new_request(entry, method, path).await,
+            ViewOp::NewResponse { entry, status } => self.handle_new_response(entry, status).await,
+
+            ViewOp::Detail { req, res } => self.handle_detail(req, res).await,
+            ViewOp::Intercept { title, content } => self.handle_intercept(title, content).await,
+        };
+
+        if let Err(e) = res {
+            log::error!("Failed to handle view op {e}");
+        }
+    }
+
+    async fn handle_new_request(
+        &mut self,
+        entry: usize,
+        method: String,
+        path: String,
+    ) -> eyre::Result<()> {
+        let color = color_method(&method);
+        let method_len = method.len();
+
         self.list
             .set_lines(
-                id as i64,
-                id as i64,
+                entry as i64,
+                entry as i64,
                 false,
-                vec![format!("{} {}", req.method, req.path)],
+                vec![format!("{} {}", method, path)],
             )
             .await?;
 
-        let color = match req.method.as_str() {
-            "GET" => "AtkpxMethodGET",
-            "HEAD" => "AtkpxMethodHEAD",
-            "POST" => "AtkpxMethodPOST",
-            "PUT" => "AtkpxMethodPUT",
-            "DELETE" => "AtkpxMethodDELETE",
-            "OPTIONS" => "AtkpxMethodOPTIONS",
-            "TRACE" => "AtkpxMethodTRACE",
-            "PATCH" => "AtkpxMethodPATCH",
-
-            _ => "AtkpxMethodGET",
-        };
-
         self.list
-            .add_highlight(self.namespace, color, id as i64, 0, req.method.len() as i64)
+            .add_highlight(self.namespace, color, entry as i64, 0, method_len as i64)
             .await?;
-
         Ok(())
     }
 
-    pub async fn report_res(&self, id: usize, res: &Response) -> eyre::Result<()> {
-        let group: Value = match res.status {
-            100..=199 => "AtkpxStatusInfo".into(),
-            200..=299 => "AtkpxStatusOk".into(),
-            300..=399 => "AtkpxStatusRedirect".into(),
-            400..=499 => "AtkpxStatusClientError".into(),
-            500..=599 => "AtkpxStatusServerError".into(),
-
-            _ => eyre::bail!("Invalid status code"),
-        };
-
+    async fn handle_new_response(&mut self, entry: usize, status: u16) -> eyre::Result<()> {
+        let color: Value = color_status(status).into();
         self.list
             .set_extmark(
                 self.namespace,
-                id as i64,
+                entry as i64,
                 -1,
                 vec![
                     (
                         "virt_text".into(),
                         Value::Array(vec![Value::Array(vec![
-                            format!("{}", res.status).into(),
-                            group,
+                            format!("{}", status).into(),
+                            color,
                         ])]),
                     ),
                     ("virt_text_pos".into(), "eol".into()),
@@ -172,218 +163,124 @@ impl View {
         Ok(())
     }
 
-    pub async fn find_line(&self) -> eyre::Result<i64> {
-        let win = self.neovim.get_current_win().await?;
-        let buf = win.get_buf().await?;
+    async fn handle_detail(&mut self, mut req: Vec<String>, res: Vec<String>) -> eyre::Result<()> {
+        req.push(String::new());
+        req.extend(res);
 
-        if buf == self.list {
-            let (line, _) = win.get_cursor().await?;
+        let lines = req;
 
-            Ok(line - 1)
-        } else {
-            eyre::bail!("list is not the current window")
-        }
-    }
-
-    pub async fn show_detail(
-        &mut self,
-        _id: usize,
-        req: &Request,
-        res: Option<&Response>,
-    ) -> eyre::Result<()> {
-        let mut dim = DimTracker::default();
-
-        dim.push(format!("{} {} {}", req.method, req.path, req.version));
-        for (key, value) in &req.headers {
-            dim.push(format!("{}: {}", key, value));
-        }
-
-        dim.blank();
-
-        if let Some(body) = req.body.lines() {
-            for line in body {
-                dim.push(line.to_string());
-            }
-        }
-
-        dim.blank();
-
-        if let Some(res) = res {
-            dim.push(format!("HTTP/1.1 {}", res.status));
-
-            for (key, value) in &res.headers {
-                dim.push(format!("{}: {}", key, value));
-            }
-
-            dim.blank();
-
-            if let Some(body) = res.body.lines() {
-                for line in body {
-                    dim.push(line.to_string())
-                }
-            }
-        }
-
-        let (width, height, lines) = dim.take();
         self.detail.set_lines(0, -1, false, lines).await?;
 
-        self.intercept_win = Some(
-            self.neovim
-                .open_win(
-                    &self.detail,
-                    true,
-                    vec![
-                        ("relative".into(), "cursor".into()),
-                        ("style".into(), "minimal".into()),
-                        ("row".into(), 0.into()),
-                        ("col".into(), 0.into()),
-                        ("height".into(), height.into()),
-                        ("width".into(), width.into()),
-                        ("border".into(), "rounded".into()),
-                    ],
-                )
-                .await?,
-        );
+        let win = self.neovim.get_current_win().await?;
+        let height = win.get_height().await?;
+        let width = win.get_width().await?;
+
+        let height = height.saturating_sub(10);
+        let width = width.saturating_sub(10);
+
+        self.neovim
+            .open_win(
+                &self.detail,
+                true,
+                vec![
+                    ("relative".into(), "window".into()),
+                    ("style".into(), "minimal".into()),
+                    ("row".into(), 5.into()),
+                    ("col".into(), 5.into()),
+                    ("height".into(), height.into()),
+                    ("width".into(), width.into()),
+                    ("border".into(), "rounded".into()),
+                ],
+            )
+            .await?;
 
         Ok(())
     }
 
-    pub async fn intercept_request(
-        &mut self,
-        req: &mut hyper::Request<Vec<u8>>,
-    ) -> srv::Result<Receiver<Vec<String>>> {
-        let lines = req_to_lines(req)?;
-
-        if self.editing {
-            log::debug!("pushing intercept backlog");
-            Ok(self.backlog.push_backlog(lines))
-        } else {
-            let recv = self.backlog.push_current();
-            log::debug!("displaying intercept");
-            self.intercept.set_lines(0, -1, false, lines).await?;
-
-            let width = self.neovim.get_current_win().await?.get_width().await?;
-            let height = self.neovim.get_current_win().await?.get_height().await?;
-
-            self.intercept_win = Some(
-                self.neovim
-                    .open_win(
-                        &self.intercept,
-                        true,
-                        vec![
-                            ("relative".into(), "editor".into()),
-                            ("title".into(), "Intercept Request".into()),
-                            ("row".into(), 5.into()),
-                            ("col".into(), 5.into()),
-                            ("height".into(), (height - 10).into()),
-                            ("width".into(), (width - 10).into()),
-                            ("border".into(), "rounded".into()),
-                        ],
-                    )
-                    .await?,
-            );
-
-            self.editing = true;
-
-            Ok(recv)
-        }
-    }
-
-    pub async fn intercept_response(
-        &mut self,
-        resp: &mut hyper::Response<Vec<u8>>,
-    ) -> srv::Result<Receiver<Vec<String>>> {
-        let lines = resp_to_lines(resp)?;
-
-        if self.editing {
-            log::debug!("pushing intercept backlog");
-            Ok(self.backlog.push_backlog(lines))
-        } else {
-            let recv = self.backlog.push_current();
-            log::debug!("displaying intercept");
-            self.intercept.set_lines(0, -1, false, lines).await?;
-
-            let width = self.neovim.get_current_win().await?.get_width().await?;
-            let height = self.neovim.get_current_win().await?.get_height().await?;
-
-            let win = self
-                .neovim
-                .open_win(
-                    &self.intercept,
-                    true,
-                    vec![
-                        ("relative".into(), "editor".into()),
-                        ("title".into(), "Intercept Response".into()),
-                        ("row".into(), 5.into()),
-                        ("col".into(), 5.into()),
-                        ("height".into(), (height - 10).into()),
-                        ("width".into(), (width - 10).into()),
-                        ("border".into(), "rounded".into()),
-                    ],
-                )
-                .await?;
-
-            self.intercept_win = Some(win);
-
-            self.editing = true;
-
-            Ok(recv)
-        }
-    }
-
-    pub async fn retrieve_intercept_request(
-        &mut self,
-        lines: Vec<String>,
-        req: &mut hyper::Request<Vec<u8>>,
-    ) -> srv::Result<bool> {
-        log::debug!("filling in response");
-
-        imprint_lines(req, lines)?;
-
-        if let Some(backlog) = self.backlog.pop() {
-            self.intercept.set_lines(0, -1, false, backlog).await?;
-        } else {
-            self.editing = false;
-            if let Some(win) = &self.intercept_win {
-                win.close(true).await?;
+    async fn handle_intercept(&mut self, title: String, content: Vec<String>) -> eyre::Result<()> {
+        if let Some(s) = &self.intercept_win {
+            if s.is_valid().await? {
+                s.close(true).await?;
             }
-
-            self.intercept_win = None;
         }
 
-        Ok(true)
-    }
+        let win = self.neovim.get_current_win().await?;
+        let height = win.get_height().await?;
+        let width = win.get_width().await?;
 
-    pub async fn retrieve_intercept_response(
-        &mut self,
-        lines: Vec<String>,
-        resp: &mut hyper::Response<Vec<u8>>,
-    ) -> srv::Result<bool> {
-        log::debug!("filling in response");
+        let height = height.saturating_sub(10);
+        let width = width.saturating_sub(10);
 
-        imprint_lines_resp(resp, lines)?;
+        self.intercept.set_lines(0, -1, true, content).await?;
+        let win = self
+            .neovim
+            .open_win(
+                &self.intercept,
+                true,
+                vec![
+                    ("relative".into(), "editor".into()),
+                    ("title".into(), title.into()),
+                    ("row".into(), 5.into()),
+                    ("col".into(), 5.into()),
+                    ("height".into(), height.into()),
+                    ("width".into(), width.into()),
+                    ("border".into(), "rounded".into()),
+                ],
+            )
+            .await?;
 
-        if let Some(backlog) = self.backlog.pop() {
-            self.intercept.set_lines(0, -1, false, backlog).await?;
-        } else {
-            self.editing = false;
-            if let Some(win) = &self.intercept_win {
-                win.close(true).await?;
-            }
-
-            self.intercept_win = None;
-        }
-
-        Ok(true)
-    }
-
-    pub async fn submit_intercept(&mut self) -> srv::Result<()> {
-        log::debug!("notifying waiting green threads");
-
-        let lines = self.intercept.get_lines(0, -1, false).await?;
-
-        self.backlog.notify(lines);
+        self.intercept_win = Some(win);
 
         Ok(())
+    }
+}
+
+pub enum ViewOp {
+    NewRequest {
+        entry: usize,
+        method: String,
+        path: String,
+    },
+
+    NewResponse {
+        entry: usize,
+        status: u16,
+    },
+
+    Detail {
+        req: Vec<String>,
+        res: Vec<String>,
+    },
+
+    Intercept {
+        title: String,
+        content: Vec<String>,
+    },
+}
+
+fn color_method(method: &str) -> &'static str {
+    match method.to_uppercase().as_str() {
+        "GET" => "AtkpxMethodGET",
+        "HEAD" => "AtkpxMethodHEAD",
+        "POST" => "AtkpxMethodPOST",
+        "PUT" => "AtkpxMethodPUT",
+        "DELETE" => "AtkpxMethodDELETE",
+        "OPTIONS" => "AtkpxMethodOPTIONS",
+        "TRACE" => "AtkpxMethodTRACE",
+        "PATCH" => "AtkpxMethodPATCH",
+
+        _ => "AtkpxMethodGET",
+    }
+}
+
+fn color_status(status: u16) -> &'static str {
+    match status {
+        100..=199 => "AtkpxStatusInfo",
+        200..=299 => "AtkpxStatusOk",
+        300..=399 => "AtkpxStatusRedirect",
+        400..=499 => "AtkpxStatusClientError",
+        500..=599 => "AtkpxStatusServerError",
+
+        _ => "AtkpxStatusServerError",
     }
 }

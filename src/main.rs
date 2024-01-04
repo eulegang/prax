@@ -1,25 +1,17 @@
 use config::Config;
-use hist::History;
-use once_cell::sync::Lazy;
 use std::{fs::File, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
 use clap::Parser;
 use log::LevelFilter;
-//use proxy::Proxy;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 mod cli;
-//mod comm;
 mod config;
 mod hist;
-//mod proxy;
 mod srv;
 
 mod nvim;
-
-//static HIST: Lazy<Arc<RwLock<History>>> = Lazy::new(|| Arc::new(RwLock::new(History::default())));
-//static PROXY: Lazy<Arc<RwLock<Proxy>>> = Lazy::new(|| Arc::new(RwLock::new(Proxy::default())));
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> eyre::Result<()> {

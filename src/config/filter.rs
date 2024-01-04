@@ -40,18 +40,8 @@ impl Filter for Config {
 
                 Rule::Intercept => match self.nvim.as_ref() {
                     Some(nvim) => {
-                        let lines = {
-                            let nvim = nvim.lock().await;
-                            let mut view = nvim.view.lock().await;
-                            view.intercept_request(req).await?
-                        };
-
-                        let lines = lines.await?;
-                        {
-                            let nvim = nvim.lock().await;
-                            let mut view = nvim.view.lock().await;
-                            if view.retrieve_intercept_request(lines, req).await? {}
-                        }
+                        let nvim = nvim.lock().await;
+                        nvim.modify_request(hostname, req).await?
                     }
                     None => {
                         log::warn!("can not send to intercepter");
@@ -107,18 +97,8 @@ impl Filter for Config {
 
                 Rule::Intercept => match self.nvim.as_ref() {
                     Some(nvim) => {
-                        let lines = {
-                            let nvim = nvim.lock().await;
-                            let mut view = nvim.view.lock().await;
-                            view.intercept_response(res).await?
-                        };
-
-                        let lines = lines.await?;
-                        {
-                            let nvim = nvim.lock().await;
-                            let mut view = nvim.view.lock().await;
-                            if view.retrieve_intercept_response(lines, res).await? {}
-                        }
+                        let nvim = nvim.lock().await;
+                        nvim.modify_response(hostname, res).await?;
                     }
                     None => {
                         log::warn!("can not send to intercepter");

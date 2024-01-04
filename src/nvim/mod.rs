@@ -1,11 +1,18 @@
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
-use tokio::sync::Mutex;
+use crate::{
+    cli::NvimConnInfo,
+    hist::History,
+    srv::{self, Filter},
+};
+use tokio::sync::{mpsc, Mutex, Notify};
 use tokio_util::sync::CancellationToken;
 
-use crate::{cli::NvimConnInfo, hist::History};
-
-use self::{handler::Handler, view::View};
+use self::{
+    handler::Handler,
+    lines::{LinesImprint, ToLines},
+    view::{View, ViewOp},
+};
 
 mod handler;
 mod intercept;
@@ -19,7 +26,10 @@ pub(crate) type Buffer = nvim_rs::Buffer<io::IoConn>;
 pub(crate) type Window = nvim_rs::Window<io::IoConn>;
 
 pub struct NVim {
-    pub view: Arc<Mutex<View>>,
+    view: Arc<Mutex<View>>,
+    action: mpsc::Sender<ViewOp>,
+    backlog: Arc<Mutex<VecDeque<Arc<Notify>>>>,
+    //pub view: Arc<Mutex<AppState>>,
 }
 
 impl NVim {
@@ -34,9 +44,8 @@ impl NVim {
         let single = conn_info.singleton();
 
         let (nvim, join) = io::IoConn::connect(&conn_info, handler).await?;
-        let view = View::new(nvim, history).await?;
-
-        let v = Arc::new(Mutex::new(view));
+        let (view, action) = View::new(nvim, token.clone()).await?;
+        let backlog = Arc::new(Mutex::new(VecDeque::<Arc<Notify>>::new()));
 
         tokio::spawn(async move {
             match join.await {
@@ -57,14 +66,131 @@ impl NVim {
             }
         });
 
-        let background_view = v.clone();
+        let v = view.clone();
+        let a = action.clone();
+        let b = backlog.clone();
         tokio::spawn(async move {
             while let Some(event) = recv.recv().await {
-                let mut view = background_view.lock().await;
-                view.handle_event(event).await;
+                let view = v.lock().await;
+                let history = history.lock().await;
+
+                match event {
+                    handler::Event::Detail => {
+                        let Ok(line) = view.find_line().await else {
+                            continue;
+                        };
+
+                        let index = line as usize - 1;
+
+                        let Some(entry) = history.entry(index) else {
+                            continue;
+                        };
+
+                        let Ok(req) = entry.request.to_lines() else {
+                            continue;
+                        };
+
+                        let res = match &entry.response {
+                            Some(response) => {
+                                let Ok(res) = response.to_lines() else {
+                                    continue;
+                                };
+
+                                res
+                            }
+
+                            None => {
+                                vec![]
+                            }
+                        };
+
+                        let Ok(_) = a.send(ViewOp::Detail { req, res }).await else {
+                            return; // stop subtask if no reciever
+                        };
+                    }
+                    handler::Event::SubmitIntercept => {
+                        let mut backlog = b.lock().await;
+
+                        if let Some(notify) = backlog.pop_front() {
+                            notify.notify_one();
+                        }
+                    }
+                }
             }
         });
 
-        Ok(NVim { view: v })
+        Ok(NVim {
+            view,
+            action,
+            backlog,
+        })
+    }
+}
+
+impl Filter for NVim {
+    async fn modify_request(&self, _: &str, req: &mut crate::srv::Req<Vec<u8>>) -> srv::Result<()> {
+        let content = req.to_lines()?;
+
+        let notify = {
+            let mut backlog = self.backlog.lock().await;
+
+            if let Err(_) = self
+                .action
+                .send(ViewOp::Intercept {
+                    title: "Intercept Request".into(),
+                    content,
+                })
+                .await
+            {
+                return Ok(());
+            };
+
+            let notify = Arc::new(Notify::new());
+            backlog.push_back(notify.clone());
+            notify
+        };
+
+        notify.notified().await;
+
+        let view = self.view.lock().await;
+        let content = view.intercept_buffer().await?;
+
+        req.imprint(content)?;
+
+        Ok(())
+    }
+
+    async fn modify_response(
+        &self,
+        _: &str,
+        res: &mut crate::srv::Res<Vec<u8>>,
+    ) -> srv::Result<()> {
+        let content = res.to_lines()?;
+
+        let notify = {
+            let mut backlog = self.backlog.lock().await;
+            if let Err(_) = self
+                .action
+                .send(ViewOp::Intercept {
+                    title: "Intercept Response".into(),
+                    content,
+                })
+                .await
+            {
+                return Ok(());
+            }
+            let notify = Arc::new(Notify::new());
+            backlog.push_back(notify.clone());
+            notify
+        };
+
+        notify.notified().await;
+
+        let view = self.view.lock().await;
+        let content = view.intercept_buffer().await?;
+
+        res.imprint(content)?;
+
+        Ok(())
     }
 }
