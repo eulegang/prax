@@ -70,9 +70,9 @@ impl ToLines for crate::hist::Request {
                 query.push('&');
             }
 
-            query.push_str(&k);
+            query.push_str(k);
             query.push('=');
-            query.push_str(&v);
+            query.push_str(v);
         }
 
         if !query.is_empty() {
@@ -149,7 +149,7 @@ impl LinesImprint for hyper::Request<Vec<u8>> {
     type Error = srv::Error;
 
     fn imprint(&mut self, lines: Vec<String>) -> Result<(), Self::Error> {
-        let Some(status) = lines.get(0) else {
+        let Some(status) = lines.first() else {
             return Err(srv::Error::InterceptMalformed);
         };
 
@@ -192,7 +192,7 @@ impl LinesImprint for hyper::Response<Vec<u8>> {
     type Error = srv::Error;
 
     fn imprint(&mut self, lines: Vec<String>) -> Result<(), Self::Error> {
-        let Some(status) = lines.get(0) else {
+        let Some(status) = lines.first() else {
             return Err(srv::Error::InterceptMalformed);
         };
 

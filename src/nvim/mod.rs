@@ -15,11 +15,9 @@ use self::{
 };
 
 mod handler;
-mod intercept;
 mod io;
 mod lines;
 mod view;
-mod windower;
 
 pub(crate) type Neovim = nvim_rs::Neovim<io::IoConn>;
 pub(crate) type Buffer = nvim_rs::Buffer<io::IoConn>;
@@ -119,6 +117,11 @@ impl NVim {
             }
         });
 
+        /*
+         * handle history entries
+        tokio::spawn(async move {});
+        */
+
         Ok(NVim {
             view,
             action,
@@ -134,13 +137,14 @@ impl Filter for NVim {
         let notify = {
             let mut backlog = self.backlog.lock().await;
 
-            if let Err(_) = self
+            if self
                 .action
                 .send(ViewOp::Intercept {
                     title: "Intercept Request".into(),
                     content,
                 })
                 .await
+                .is_err()
             {
                 return Ok(());
             };
@@ -169,16 +173,19 @@ impl Filter for NVim {
 
         let notify = {
             let mut backlog = self.backlog.lock().await;
-            if let Err(_) = self
+
+            if self
                 .action
                 .send(ViewOp::Intercept {
                     title: "Intercept Response".into(),
                     content,
                 })
                 .await
+                .is_err()
             {
                 return Ok(());
             }
+
             let notify = Arc::new(Notify::new());
             backlog.push_back(notify.clone());
             notify

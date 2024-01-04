@@ -95,7 +95,7 @@ impl View {
     }
 
     pub async fn intercept_buffer(&self) -> Result<Vec<String>, Box<CallError>> {
-        Ok(self.intercept.get_lines(0, -1, true).await?)
+        self.intercept.get_lines(0, -1, true).await
     }
 
     async fn handle(&mut self, op: ViewOp) {

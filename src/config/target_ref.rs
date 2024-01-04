@@ -38,7 +38,7 @@ async fn target_ref_req(
         })?;
 
     for r in rules {
-        t.req.push(r.into());
+        t.req.push(r);
     }
 
     Ok(target)
@@ -62,7 +62,7 @@ async fn target_ref_resp(
         })?;
 
     for r in rules {
-        t.resp.push(r.into());
+        t.resp.push(r);
     }
 
     Ok(target)
