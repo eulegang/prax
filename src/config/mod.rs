@@ -39,15 +39,11 @@ type UProxy = Arc<Mutex<Proxy>>;
 #[derive(Default)]
 pub struct Config {
     proxy: UProxy,
-    lua: Arc<Mutex<Lua>>,
     nvim: Arc<Option<Mutex<NVim>>>,
-}
 
-// TODO: remove
-// I probably should not have done this,
-// but I'm not quite sure if this is nessecary
-// and I'm not sure that wrapping fields in Arc allows Sync
-unsafe impl Sync for Config {}
-unsafe impl Send for Config {}
+    // May need in future and need to ensure lua interp stays around
+    #[allow(dead_code)]
+    lua: Arc<Mutex<Lua>>,
+}
 
 impl UserData for Rule {}
