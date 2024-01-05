@@ -1,0 +1,12 @@
+
+* Atkpx
+** Tasks
+   - (x) refactor data flow communication
+   - ( ) History storage
+   - ( ) TLS Middle Man
+
+** Concepts
+***  {:concepts/store:}[history store]
+
+
+
