@@ -2,7 +2,7 @@ use std::{collections::VecDeque, sync::Arc};
 
 use crate::{
     cli::NvimConnInfo,
-    hist::History,
+    hist::Hist,
     srv::{self, Filter},
 };
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -34,7 +34,7 @@ impl NVim {
     pub async fn connect(
         conn_info: NvimConnInfo,
         token: CancellationToken,
-        history: Arc<Mutex<History>>,
+        history: &'static Hist,
     ) -> eyre::Result<NVim> {
         let (send, mut recv) = tokio::sync::mpsc::channel(16);
 
@@ -70,7 +70,6 @@ impl NVim {
         tokio::spawn(async move {
             while let Some(event) = recv.recv().await {
                 let view = v.lock().await;
-                let history = history.lock().await;
 
                 match event {
                     handler::Event::Detail => {
@@ -117,10 +116,55 @@ impl NVim {
             }
         });
 
-        /*
-         * handle history entries
-        tokio::spawn(async move {});
-        */
+        let a = action.clone();
+        tokio::spawn(async move {
+            let mut recv = history.listen();
+            let action = a;
+
+            loop {
+                let Ok(event) = recv.recv().await else {
+                    break;
+                };
+
+                match event {
+                    crate::hist::HistoryEvent::Request { index } => {
+                        let entry = index;
+                        let Some(request) = history.request(index) else {
+                            continue;
+                        };
+
+                        if action
+                            .send(ViewOp::NewRequest {
+                                entry,
+                                method: request.method.clone(),
+                                path: request.path.clone(),
+                            })
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    crate::hist::HistoryEvent::Response { index } => {
+                        let entry = index;
+                        let Some(response) = history.response(index) else {
+                            continue;
+                        };
+
+                        if action
+                            .send(ViewOp::NewResponse {
+                                entry,
+                                status: response.status,
+                            })
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
 
         Ok(NVim {
             view,

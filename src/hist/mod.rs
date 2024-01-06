@@ -1,15 +1,17 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 mod body;
 mod conv;
 mod deser;
-//mod store;
+mod store;
 
 pub use body::Body;
-use tokio::sync::Mutex;
+use tokio::sync::broadcast;
 
 use crate::srv::Scribe;
+
+use self::store::{Append, Random, Store};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Request {
@@ -29,67 +31,87 @@ pub struct Response {
 }
 
 #[derive(Debug)]
+pub struct Ent<'a> {
+    pub request: &'a Request,
+    pub response: Option<&'a Response>,
+}
+
+#[derive(Debug)]
 pub struct Entry {
     pub request: Request,
     pub response: Option<Response>,
 }
 
+#[derive(Clone)]
+pub enum HistoryEvent {
+    Request { index: usize },
+    Response { index: usize },
+}
+
+pub struct Hist {
+    requests: Store<Request, Append>,
+    responses: Store<Response, Random>,
+
+    events: broadcast::Sender<HistoryEvent>,
+}
+
 #[derive(Default, Debug)]
 pub struct History(Vec<Entry>);
 
-impl History {
-    pub fn request(&mut self, request: Request) -> usize {
-        let response = None;
-        let ent = Entry { request, response };
-
-        let idx = self.0.len();
-
-        self.0.push(ent);
-
-        idx
-    }
-
-    pub fn response(&mut self, index: usize, res: Response) -> bool {
-        let Some(ent) = self.0.get_mut(index) else {
-            return false;
-        };
-
-        if ent.response.is_some() {
-            return false;
-        }
-
-        ent.response = Some(res);
-
-        true
-    }
-
-    pub fn entry(&self, index: usize) -> Option<&Entry> {
-        self.0.get(index)
-    }
-}
-
-pub struct Winner {
-    history: Arc<Mutex<History>>,
-}
-
-impl Winner {
-    pub fn new(history: Arc<Mutex<History>>) -> Self {
-        Winner { history }
-    }
-}
-
-impl Scribe for Winner {
+impl Scribe for &Hist {
     type Ticket = usize;
 
-    async fn report_request(&self, req: &crate::srv::Req<Vec<u8>>) -> Self::Ticket {
+    async fn report_request(&self, req: &crate::srv::Req<Vec<u8>>) -> usize {
         let req = Request::from(req);
-        let mut hist = self.history.lock().await;
-        hist.request(req)
+        let index = self.requests.push(req);
+
+        let _ = self.events.send(HistoryEvent::Request { index });
+
+        index
     }
 
-    async fn report_response(&self, ticket: Self::Ticket, res: &crate::srv::Res<Vec<u8>>) {
+    async fn report_response(&self, index: Self::Ticket, res: &crate::srv::Res<Vec<u8>>) {
         let res = Response::from(res);
-        let mut hist = self.history.lock().await;
-        hist.response(ticket, res);
+
+        if self.responses.insert(index, res) {
+            let _ = self.events.send(HistoryEvent::Response { index });
+        }
+    }
+}
+
+impl Hist {
+    pub fn entry(&self, index: usize) -> Option<Ent> {
+        let request = self.requests.get(index)?;
+
+        let response = self.responses.get(index);
+
+        Some(Ent { request, response })
+    }
+
+    pub fn request(&self, index: usize) -> Option<&Request> {
+        self.requests.get(index)
+    }
+
+    pub fn response(&self, index: usize) -> Option<&Response> {
+        self.responses.get(index)
+    }
+
+    pub fn listen(&self) -> broadcast::Receiver<HistoryEvent> {
+        self.events.subscribe()
+    }
+}
+
+impl Default for Hist {
+    fn default() -> Self {
+        let requests = Store::<Request, Append>::default();
+        let responses = Store::default();
+
+        let events = broadcast::Sender::new(16);
+
+        Hist {
+            requests,
+            responses,
+            events,
+        }
     }
 }

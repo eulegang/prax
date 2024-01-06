@@ -1,4 +1,5 @@
 use config::Config;
+use hist::Hist;
 use std::{fs::File, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
@@ -31,29 +32,33 @@ async fn main() -> eyre::Result<()> {
         pretty_env_logger::init()
     }
 
-    let hist = Arc::new(Mutex::new(hist::History::default()));
-    let winner = hist::Winner::new(hist.clone());
-
     let token = CancellationToken::new();
 
-    let nvim = if let Some(nvim) = cli.nvim {
-        let token = token.clone();
+    if let Some(nvim) = cli.nvim {
+        let history: &'static Hist = Box::leak(Box::default());
 
-        Arc::new(Some(Mutex::new(
-            nvim::NVim::connect(nvim, token, hist.clone()).await?,
-        )))
+        let nvim = Arc::new(Some(Mutex::new(
+            nvim::NVim::connect(nvim, token.clone(), history).await?,
+        )));
+
+        let config = if let Some(path) = cli.configure {
+            Config::load(path, nvim)?
+        } else {
+            Config::default()
+        };
+
+        let server = srv::Server::new(cli.listen, token, config, history);
+        server.listen().await?;
     } else {
-        Arc::new(None)
-    };
+        let config = if let Some(path) = cli.configure {
+            Config::load(path, Arc::new(None))?
+        } else {
+            Config::default()
+        };
 
-    let config = if let Some(path) = cli.configure {
-        Config::load(path, nvim)?
-    } else {
-        Config::default()
+        let server = srv::Server::new(cli.listen, token, config, ());
+        server.listen().await?;
     };
-
-    let server = srv::Server::new(cli.listen, token, config, winner);
-    server.listen().await?;
 
     Ok(())
 }
