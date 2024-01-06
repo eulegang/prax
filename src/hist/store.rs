@@ -64,6 +64,10 @@ impl<T> Node<T> {
     }
 }
 
+fn node_slot<'a, T>(node: *const Node<T>, index: usize) -> &'a AtomicPtr<T> {
+    unsafe { &(*node).blk[index] }
+}
+
 pub struct Store<T, I: Inserter> {
     inserter: I,
     root: AtomicPtr<Node<T>>,
@@ -103,95 +107,104 @@ where
             Some(unsafe { &*elem })
         }
     }
-}
 
-impl<T> Store<T, Random> {
-    pub fn insert(&self, index: usize, elem: T) -> bool {
-        let ptr = Box::into_raw(Box::new(elem));
-
-        let iters = index / BLK_LEN;
-        let off = index % BLK_LEN;
+    fn find_node(&self, iters: usize, alloced: &mut Option<*mut Node<T>>) -> *mut Node<T> {
         let mut cur = self.root.load(Ordering::SeqCst);
-
-        let mut left_over = None::<*mut Node<T>>;
-
         if cur.is_null() {
             let node = Node::alloc();
 
             if self
                 .root
                 .compare_exchange(cur, node, Ordering::AcqRel, Ordering::Relaxed)
-                .is_err()
+                .is_ok()
             {
-                left_over = Some(node);
+                cur = node;
+            } else {
+                cur = self.root.load(Ordering::SeqCst);
+                *alloced = Some(node);
             }
         };
 
         for _ in 0..iters {
-            let node = unsafe { cur.read() };
+            let node = unsafe { cur.read_volatile() };
 
             let next = node.next.load(Ordering::SeqCst);
 
             if next.is_null() {
-                let alloced = if let Some(node) = left_over {
-                    left_over = None;
+                let new = if let Some(node) = *alloced {
+                    *alloced = None;
                     node
                 } else {
                     Node::alloc()
                 };
-                let node = unsafe { next.read() };
+                let node = unsafe { next.read_volatile() };
 
                 if node
                     .next
                     .compare_exchange(
                         std::ptr::null_mut(),
-                        alloced,
+                        new,
                         Ordering::AcqRel,
                         Ordering::Relaxed,
                     )
                     .is_err()
                 {
-                    left_over = Some(alloced);
+                    *alloced = Some(new);
                 }
 
-                cur = alloced
+                cur = new
             } else {
                 cur = next
             };
         }
 
-        let node = unsafe { cur.read() };
+        cur
+    }
 
-        let success = node.blk[off]
+    fn push_end(mut base: *mut Node<T>, new: *mut Node<T>) {
+        loop {
+            let node = unsafe { base.read_volatile() };
+            let next = node.next.load(Ordering::SeqCst);
+
+            if next.is_null() {
+                match node
+                    .next
+                    .compare_exchange(next, new, Ordering::SeqCst, Ordering::Relaxed)
+                {
+                    Ok(_) => break,
+                    Err(_) => {
+                        base = node.next.load(Ordering::SeqCst);
+                    }
+                };
+            } else {
+                base = next;
+            }
+        }
+    }
+}
+
+impl<T> Store<T, Random> {
+    pub fn insert(&self, index: usize, elem: T) -> bool {
+        let iters = index / BLK_LEN;
+        let off = index % BLK_LEN;
+        let boxed_elem = Box::into_raw(Box::new(elem));
+
+        let mut alloc = None::<*mut Node<T>>;
+        let ptr = self.find_node(iters, &mut alloc);
+
+        let slot_ptr = node_slot(ptr, off);
+
+        let success = slot_ptr
             .compare_exchange(
                 std::ptr::null_mut(),
-                ptr,
+                boxed_elem,
                 Ordering::SeqCst,
                 Ordering::SeqCst,
             )
             .is_ok();
 
-        if let Some(node) = left_over {
-            loop {
-                let n = unsafe { cur.read() };
-                let next = n.next.load(Ordering::SeqCst);
-
-                if next.is_null() {
-                    match n.next.compare_exchange(
-                        std::ptr::null_mut(),
-                        node,
-                        Ordering::SeqCst,
-                        Ordering::Relaxed,
-                    ) {
-                        Ok(_) => break,
-                        Err(_) => {
-                            cur = n.next.load(Ordering::SeqCst);
-                        }
-                    };
-                } else {
-                    cur = next;
-                }
-            }
+        if let Some(node) = alloc {
+            Self::push_end(ptr, node);
         }
 
         success
@@ -202,88 +215,54 @@ impl<T> Store<T, Append> {
     pub fn push(&self, elem: T) -> usize {
         let slot = self.inserter.0.fetch_add(1, Ordering::AcqRel);
 
-        let ptr = Box::into_raw(Box::new(elem));
+        let boxed_elem = Box::into_raw(Box::new(elem));
 
         let iters = slot / BLK_LEN;
         let off = slot % BLK_LEN;
-        let mut cur = self.root.load(Ordering::SeqCst);
 
-        let mut left_over = None::<*mut Node<T>>;
+        let mut alloc = None::<*mut Node<T>>;
+        let ptr = self.find_node(iters, &mut alloc);
+        let a = node_slot(ptr, off);
 
-        if cur.is_null() {
-            let node = Node::alloc();
+        //let a = unsafe { &*addr_of!((*ptr).blk[off]) };
 
-            if self
-                .root
-                .compare_exchange(cur, node, Ordering::AcqRel, Ordering::Relaxed)
-                .is_err()
-            {
-                left_over = Some(node);
-            }
-        };
+        a.store(boxed_elem, Ordering::SeqCst);
 
-        for _ in 0..iters {
-            let node = unsafe { cur.read() };
-
-            let next = node.next.load(Ordering::SeqCst);
-
-            if next.is_null() {
-                let alloced = if let Some(node) = left_over {
-                    left_over = None;
-                    node
-                } else {
-                    Node::alloc()
-                };
-                let node = unsafe { next.read() };
-
-                if node
-                    .next
-                    .compare_exchange(
-                        std::ptr::null_mut(),
-                        alloced,
-                        Ordering::AcqRel,
-                        Ordering::Relaxed,
-                    )
-                    .is_err()
-                {
-                    left_over = Some(alloced);
-                }
-
-                cur = alloced
-            } else {
-                cur = next
-            };
-        }
-
-        let node = unsafe { cur.read() };
-
-        // should have no conflicts slots can't overlap and slots are guaranteed to be unique
-        node.blk[off].store(ptr, Ordering::SeqCst);
-
-        if let Some(node) = left_over {
-            loop {
-                let n = unsafe { cur.read() };
-                let next = n.next.load(Ordering::SeqCst);
-
-                if next.is_null() {
-                    match n.next.compare_exchange(
-                        std::ptr::null_mut(),
-                        node,
-                        Ordering::SeqCst,
-                        Ordering::Relaxed,
-                    ) {
-                        Ok(_) => break,
-                        Err(_) => {
-                            cur = n.next.load(Ordering::SeqCst);
-                        }
-                    };
-                } else {
-                    cur = next;
-                }
-            }
+        if let Some(node) = alloc {
+            Self::push_end(ptr, node);
         }
 
         slot
+    }
+}
+
+impl<T, I> std::fmt::Debug for Store<T, I>
+where
+    T: std::fmt::Debug,
+    I: Inserter,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut li = f.debug_list();
+
+        let mut cur = self.root.load(Ordering::SeqCst);
+
+        while !cur.is_null() {
+            let node = unsafe { cur.read_volatile() };
+
+            for ent in &node.blk {
+                let elem = ent.load(Ordering::SeqCst);
+                if !elem.is_null() {
+                    li.entry(unsafe { &*elem });
+                    ent.store(std::ptr::null_mut(), Ordering::SeqCst);
+                } else {
+                    li.entry(&None::<()>);
+                }
+            }
+
+            cur = node.next.load(Ordering::SeqCst);
+        }
+
+        li.finish()
     }
 }
 
@@ -299,7 +278,65 @@ where
     }
 }
 
+impl<T, I> Drop for Store<T, I>
+where
+    I: Inserter,
+{
+    fn drop(&mut self) {
+        let mut cur = self.root.load(Ordering::SeqCst);
+
+        while !cur.is_null() {
+            let node = unsafe { cur.read_volatile() };
+            let base = node.blk.as_ptr();
+
+            for i in 0..BLK_LEN {
+                let ent = unsafe { &*base.add(i) };
+
+                let elem = ent.load(Ordering::SeqCst);
+                if !elem.is_null() {
+                    drop(unsafe { Box::from_raw(elem) });
+                    ent.store(std::ptr::null_mut(), Ordering::SeqCst);
+                }
+            }
+
+            let next = node.next.load(Ordering::SeqCst);
+
+            drop(unsafe { Box::from_raw(cur) });
+
+            cur = next;
+        }
+    }
+}
+
 #[test]
 fn node_size() {
     assert_eq!(std::mem::size_of::<Node<()>>(), 256);
+}
+
+#[test]
+fn test_push() {
+    let store = Store::<usize, Append>::default();
+
+    store.push(1);
+    store.push(2);
+    store.push(3);
+
+    assert_eq!(store.get(0), Some(&1));
+    assert_eq!(store.get(1), Some(&2));
+    assert_eq!(store.get(2), Some(&3));
+}
+
+#[test]
+fn test_insert() {
+    let store = Store::<usize, Random>::default();
+
+    store.insert(1, 4);
+    store.insert(2, 5);
+    store.insert(3, 6);
+
+    dbg!(&store);
+
+    assert_eq!(store.get(1), Some(&4));
+    assert_eq!(store.get(2), Some(&5));
+    assert_eq!(store.get(3), Some(&6));
 }
