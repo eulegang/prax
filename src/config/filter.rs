@@ -14,12 +14,14 @@ impl Filter for Config {
     ) -> Result<()> {
         let proxy = self.proxy.lock().await;
 
-        log::debug!("applying request rules to {hostname}");
+        log::debug!("applying config request rules to {hostname}");
         let Some(target) = proxy.targets.iter().find(|t| t.hostname == hostname) else {
             return Ok(());
         };
 
         for rule in &target.req {
+            log::trace!("applying request rule {rule:?}");
+
             match rule {
                 Rule::Dump => {
                     let mut buf = Vec::<u8>::new();
@@ -57,6 +59,7 @@ impl Filter for Config {
             }
         }
 
+        log::trace!("finished applying config request rules to {hostname}");
         Ok(())
     }
 
@@ -67,12 +70,14 @@ impl Filter for Config {
     ) -> Result<()> {
         let proxy = self.proxy.lock().await;
 
-        log::debug!("applying request rules to {hostname}");
+        log::debug!("applying response rules to {hostname}");
         let Some(target) = proxy.targets.iter().find(|t| t.hostname == hostname) else {
             return Ok(());
         };
 
         for rule in &target.resp {
+            log::trace!("applying response rule {rule:?}");
+
             match rule {
                 Rule::Dump => {
                     let mut buf = Vec::<u8>::new();

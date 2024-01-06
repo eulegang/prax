@@ -69,6 +69,7 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response>> + Send>>;
 
     fn call(&self, req: Req<Incoming>) -> Self::Future {
+        log::trace!("starting to service request");
         let Some(host) = req.uri().host() else {
             let body = "Bad Request".as_bytes().into();
 
@@ -80,6 +81,8 @@ where
         let port = req.uri().port_u16().unwrap_or(80);
         let lookup = format!("{host}:{port}");
 
+        log::trace!("request host detected: {lookup:?}");
+
         let filter = self.filter.clone();
         let scribe = self.scribe.clone();
 
@@ -87,17 +90,23 @@ where
             let mut req = collect_req(req).await?;
 
             filter.modify_request(&lookup, &mut req).await?;
+
+            log::trace!("sending modified request to scribe");
             let ticket = scribe.report_request(&req).await;
+            log::trace!("done sending modified request to scribe");
 
             let stream = TcpStream::connect(&lookup).await.unwrap();
             let io = TokioIo::new(stream);
 
+            log::trace!("starting connection to requested host");
             let (mut sender, conn) = Builder::new().handshake::<_, Full<Bytes>>(io).await?;
             tokio::task::spawn(async move {
                 if let Err(err) = conn.await {
                     log::error!("Connection failed: {:?}", err);
                 }
             });
+
+            log::trace!("established connection to requested host");
 
             let mut builder = Uri::builder();
             if let Some(pq) = req.uri().path_and_query() {
@@ -112,6 +121,7 @@ where
             filter.modify_response(&lookup, &mut res).await?;
             scribe.report_response(ticket, &res);
 
+            log::trace!("finished to service request");
             Ok(res.map(|b| b.into()))
         })
     }
