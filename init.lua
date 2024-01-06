@@ -9,13 +9,3 @@ target('localhost:8000')
       set_header("X-AttackProxy", "set"),
       dump
     )
-
-target('localhost:3000')
-    :req(
-      set_header("Authorization", "Bearer xyz"),
-      dump
-    )
-    :resp(
-      set_header("X-AttackProxy", "set"),
-      dump,
-    )
