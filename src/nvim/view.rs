@@ -185,7 +185,7 @@ impl View {
                 &self.detail,
                 true,
                 vec![
-                    ("relative".into(), "window".into()),
+                    ("relative".into(), "win".into()),
                     ("style".into(), "minimal".into()),
                     ("row".into(), 5.into()),
                     ("col".into(), 5.into()),
