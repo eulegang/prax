@@ -110,6 +110,8 @@ impl View {
 
             ViewOp::Detail { req, res } => self.handle_detail(req, res).await,
             ViewOp::Intercept { title, content } => self.handle_intercept(title, content).await,
+
+            ViewOp::DismissIntercept => self.handle_dismiss_intercept().await,
         };
 
         if let Err(e) = res {
@@ -235,6 +237,16 @@ impl View {
 
         Ok(())
     }
+
+    async fn handle_dismiss_intercept(&mut self) -> eyre::Result<()> {
+        if let Some(win) = &self.intercept_win {
+            win.close(true).await?;
+
+            self.intercept_win = None;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -259,6 +271,8 @@ pub enum ViewOp {
         title: String,
         content: Vec<String>,
     },
+
+    DismissIntercept,
 }
 
 fn color_method(method: &str) -> &'static str {

@@ -63,6 +63,11 @@ pub fn ui_binding(
                     let mut backlog = backlog.lock().await;
 
                     if let Some(notify) = backlog.pop_front() {
+                        if backlog.is_empty() {
+                            let Ok(_) = actions.send(ViewOp::DismissIntercept).await else {
+                                return;
+                            };
+                        }
                         notify.notify_one();
                     }
                 }
