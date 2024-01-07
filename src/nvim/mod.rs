@@ -17,6 +17,7 @@ use self::{
 mod handler;
 mod io;
 mod lines;
+mod tasks;
 mod view;
 
 pub(crate) type Neovim = nvim_rs::Neovim<io::IoConn>;
@@ -36,7 +37,7 @@ impl NVim {
         token: CancellationToken,
         history: &'static Hist,
     ) -> eyre::Result<NVim> {
-        let (send, mut recv) = tokio::sync::mpsc::channel(16);
+        let (send, recv) = tokio::sync::mpsc::channel(16);
 
         let handler = Handler::new(token.clone(), send);
         let single = conn_info.singleton();
@@ -45,126 +46,9 @@ impl NVim {
         let (view, action) = View::new(nvim, token.clone()).await?;
         let backlog = Arc::new(Mutex::new(VecDeque::<Arc<Notify>>::new()));
 
-        tokio::spawn(async move {
-            match join.await {
-                Ok(Ok(())) => {}
-                Err(loop_err) => {
-                    log::error!("io loop error: {loop_err}");
-                }
-
-                Ok(Err(e)) => {
-                    if !e.is_channel_closed() {
-                        log::error!("interaction error: {e}");
-                    }
-                }
-            }
-
-            if single {
-                token.cancel()
-            }
-        });
-
-        let v = view.clone();
-        let a = action.clone();
-        let b = backlog.clone();
-        tokio::spawn(async move {
-            while let Some(event) = recv.recv().await {
-                let view = v.lock().await;
-
-                match event {
-                    handler::Event::Detail => {
-                        let Ok(line) = view.find_line().await else {
-                            continue;
-                        };
-
-                        let index = line as usize - 1;
-
-                        let Some(entry) = history.entry(index) else {
-                            continue;
-                        };
-
-                        let Ok(req) = entry.request.to_lines() else {
-                            continue;
-                        };
-
-                        let res = match &entry.response {
-                            Some(response) => {
-                                let Ok(res) = response.to_lines() else {
-                                    continue;
-                                };
-
-                                res
-                            }
-
-                            None => {
-                                vec![]
-                            }
-                        };
-
-                        let Ok(_) = a.send(ViewOp::Detail { req, res }).await else {
-                            return; // stop subtask if no reciever
-                        };
-                    }
-                    handler::Event::SubmitIntercept => {
-                        let mut backlog = b.lock().await;
-
-                        if let Some(notify) = backlog.pop_front() {
-                            notify.notify_one();
-                        }
-                    }
-                }
-            }
-        });
-
-        let a = action.clone();
-        tokio::spawn(async move {
-            let mut recv = history.listen();
-            let action = a;
-
-            loop {
-                let Ok(event) = recv.recv().await else {
-                    break;
-                };
-
-                match event {
-                    crate::hist::HistoryEvent::Request { index } => {
-                        let entry = index;
-                        let Some(request) = history.request(index) else {
-                            continue;
-                        };
-
-                        if action
-                            .send(ViewOp::NewRequest {
-                                entry,
-                                method: request.method.clone(),
-                                path: request.path.clone(),
-                            })
-                            .await
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                    crate::hist::HistoryEvent::Response { index } => {
-                        let entry = index;
-                        let Some(response) = history.response(index) else {
-                            continue;
-                        };
-
-                        if action
-                            .send(ViewOp::NewResponse {
-                                entry,
-                                status: response.status,
-                            })
-                            .await
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                }
-            }
-        });
+        tasks::runloop(join, if single { Some(token) } else { None });
+        tasks::ui_binding(recv, view.clone(), action.clone(), backlog.clone(), history);
+        tasks::history_report(action.clone(), history);
 
         Ok(NVim {
             view,
