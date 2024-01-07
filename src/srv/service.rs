@@ -84,7 +84,7 @@ where
         log::trace!("request host detected: {lookup:?}");
 
         let filter = self.filter.clone();
-        let scribe = self.scribe.clone();
+        let scribe = self.scribe;
 
         Box::pin(async move {
             let mut req = collect_req(req).await?;
@@ -119,7 +119,10 @@ where
             let mut res = collect_res(res).await?;
 
             filter.modify_response(&lookup, &mut res).await?;
-            scribe.report_response(ticket, &res);
+
+            log::trace!("sending modified response to scribe");
+            scribe.report_response(ticket, &res).await;
+            log::trace!("done sending modified response to scribe");
 
             log::trace!("finished to service request");
             Ok(res.map(|b| b.into()))

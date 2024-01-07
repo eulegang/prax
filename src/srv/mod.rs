@@ -42,17 +42,16 @@ pub trait Scribe {
     ) -> impl Future<Output = ()> + Send;
 }
 
-pub struct Server<F, S> {
+pub struct Server<F, S: 'static> {
     addr: SocketAddr,
     token: CancellationToken,
     filter: Arc<F>,
-    scribe: Arc<S>,
+    scribe: &'static S,
 }
 
 impl<F, S> Server<F, S> {
-    pub fn new(addr: SocketAddr, token: CancellationToken, filter: F, scribe: S) -> Self {
+    pub fn new(addr: SocketAddr, token: CancellationToken, filter: F, scribe: &'static S) -> Self {
         let filter = Arc::new(filter);
-        let scribe = Arc::new(scribe);
 
         Server {
             addr,

@@ -99,6 +99,7 @@ impl View {
     }
 
     async fn handle(&mut self, op: ViewOp) {
+        log::trace!("handling view operation: {op:?}");
         let res = match op {
             ViewOp::NewRequest {
                 entry,
@@ -141,6 +142,7 @@ impl View {
     }
 
     async fn handle_new_response(&mut self, entry: usize, status: u16) -> eyre::Result<()> {
+        log::trace!("new reponse found");
         let color: Value = color_status(status).into();
         self.list
             .set_extmark(
@@ -235,6 +237,7 @@ impl View {
     }
 }
 
+#[derive(Debug)]
 pub enum ViewOp {
     NewRequest {
         entry: usize,

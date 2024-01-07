@@ -48,6 +48,7 @@ pub enum HistoryEvent {
     Response { index: usize },
 }
 
+#[derive(Debug)]
 pub struct Hist {
     requests: Store<Request, Append>,
     responses: Store<Response, Random>,
@@ -58,7 +59,7 @@ pub struct Hist {
 #[derive(Default, Debug)]
 pub struct History(Vec<Entry>);
 
-impl Scribe for &Hist {
+impl Scribe for Hist {
     type Ticket = usize;
 
     async fn report_request(&self, req: &crate::srv::Req<Vec<u8>>) -> usize {

@@ -35,6 +35,7 @@ async fn main() -> eyre::Result<()> {
     let token = CancellationToken::new();
 
     if let Some(nvim) = cli.nvim {
+        log::trace!("loading nvim connection");
         let history: &'static Hist = Box::leak(Box::default());
 
         let nvim = Arc::new(Some(Mutex::new(
@@ -56,7 +57,7 @@ async fn main() -> eyre::Result<()> {
             Config::default()
         };
 
-        let server = srv::Server::new(cli.listen, token, config, ());
+        let server = srv::Server::new(cli.listen, token, config, &());
         server.listen().await?;
     };
 
