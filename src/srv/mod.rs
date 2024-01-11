@@ -1,15 +1,20 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use futures::Future;
+use http_body_util::Full;
+use hyper::{body::Bytes, client::conn::http1::SendRequest};
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-//mod srv;
-
+mod err;
 mod listen;
 mod null;
 mod service;
+mod tls;
 
-pub use service::{Error, Result};
+pub use err::{Error, Result};
+
+pub use self::tls::Tls;
 
 pub type Req<T> = hyper::Request<T>;
 pub type Res<T> = hyper::Response<T>;
@@ -30,7 +35,6 @@ pub trait Filter {
 }
 
 /// A trait to add to a history store
-#[allow(async_fn_in_trait)]
 pub trait Scribe {
     type Ticket: Send;
 
@@ -47,10 +51,34 @@ pub struct Server<F, S: 'static> {
     token: CancellationToken,
     filter: Arc<F>,
     scribe: &'static S,
+    tls: Option<Tls>,
+}
+
+pub struct Tunnel<F, S: 'static> {
+    sender: Arc<Mutex<SendRequest<Full<Bytes>>>>,
+    server: Server<F, S>,
+}
+
+impl<F, S: 'static> Clone for Server<F, S> {
+    fn clone(&self) -> Self {
+        Server {
+            token: self.token.clone(),
+            addr: self.addr.clone(),
+            filter: self.filter.clone(),
+            scribe: self.scribe,
+            tls: self.tls.clone(),
+        }
+    }
 }
 
 impl<F, S> Server<F, S> {
-    pub fn new(addr: SocketAddr, token: CancellationToken, filter: F, scribe: &'static S) -> Self {
+    pub fn new(
+        addr: SocketAddr,
+        token: CancellationToken,
+        filter: F,
+        scribe: &'static S,
+        tls: Option<Tls>,
+    ) -> Self {
         let filter = Arc::new(filter);
 
         Server {
@@ -58,6 +86,7 @@ impl<F, S> Server<F, S> {
             token,
             filter,
             scribe,
+            tls,
         }
     }
 }

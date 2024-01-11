@@ -5,7 +5,7 @@ impl Filter for () {
         &self,
         _: &str,
         _: &mut super::Req<Vec<u8>>,
-    ) -> Result<(), super::service::Error> {
+    ) -> Result<(), super::Error> {
         Ok(())
     }
 
@@ -13,7 +13,7 @@ impl Filter for () {
         &self,
         _: &str,
         _: &mut super::Res<Vec<u8>>,
-    ) -> Result<(), super::service::Error> {
+    ) -> Result<(), super::Error> {
         Ok(())
     }
 }

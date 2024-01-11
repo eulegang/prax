@@ -36,3 +36,7 @@ lazy_static = "1.4.0"
 simplelog = "0.12.1"
 thiserror = "1.0.52"
 
+rustls = "0.22.2"
+tokio-rustls = "0.25.0"
+webpki-roots = "0.26.0"
+rustls-pemfile = "2.0.0"

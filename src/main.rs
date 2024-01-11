@@ -1,5 +1,6 @@
 use config::Config;
 use hist::Hist;
+use srv::Tls;
 use std::{fs::File, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
@@ -32,6 +33,7 @@ async fn main() -> eyre::Result<()> {
         pretty_env_logger::init()
     }
 
+    let tls = Tls::load(cli.tls)?;
     let token = CancellationToken::new();
 
     if let Some(nvim) = cli.nvim {
@@ -48,7 +50,7 @@ async fn main() -> eyre::Result<()> {
             Config::default()
         };
 
-        let server = srv::Server::new(cli.listen, token, config, history);
+        let server = srv::Server::new(cli.listen, token, config, history, tls);
         server.listen().await?;
     } else {
         let config = if let Some(path) = cli.configure {
@@ -57,7 +59,7 @@ async fn main() -> eyre::Result<()> {
             Config::default()
         };
 
-        let server = srv::Server::new(cli.listen, token, config, &());
+        let server = srv::Server::new(cli.listen, token, config, &(), tls);
         server.listen().await?;
     };
 

@@ -1,10 +1,10 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
-use hyper::client::conn::http1::Builder;
 use hyper::Uri;
+use hyper::{client::conn::http1::Builder, Method};
 use hyper_util::rt::TokioIo;
-use thiserror::Error;
 
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -12,53 +12,19 @@ use hyper::{
     service::Service,
     Response,
 };
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ServerConfig};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
+use tokio_rustls::{TlsAcceptor, TlsConnector};
+use tokio_util::sync::CancellationToken;
 
-use super::{Filter, Req, Res, Scribe, Server};
+use crate::srv::Tunnel;
 
-pub type Result<T> = std::result::Result<T, Error>;
+use super::{Error, Filter, Req, Res, Result, Scribe, Server};
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("io error \"{0}\"")]
-    IO(#[from] tokio::io::Error),
-
-    #[error("hyper error \"{0}\"")]
-    Hyper(#[from] hyper::Error),
-
-    #[error("hyper error \"{0}\"")]
-    HttpHyper(#[from] hyper::http::Error),
-
-    #[error("failed to call nvim funciton \"{0}\"")]
-    Nvim(#[from] Box<nvim_rs::error::CallError>),
-
-    #[error("Failed to recieve channel item error")]
-    TokioRecv(#[from] tokio::sync::oneshot::error::RecvError),
-
-    #[error("Intercept does not conform to format")]
-    InterceptMalformed,
-
-    #[error("Invalid status code")]
-    StatusCode(#[from] hyper::http::status::InvalidStatusCode),
-
-    #[error("Invalid invalid header name")]
-    HeaderName(#[from] hyper::header::InvalidHeaderName),
-
-    #[error("Invalid invalid header value")]
-    HeaderValue(#[from] hyper::header::InvalidHeaderValue),
-
-    #[error("Invalid invalid method")]
-    Method(#[from] hyper::http::method::InvalidMethod),
-
-    #[error("Failed to parse utf-8")]
-    Body(#[from] std::str::Utf8Error),
-
-    #[error("Failed to marshal header")]
-    HeaderMarshal(#[from] hyper::header::ToStrError),
-}
-
-impl<F, S> Service<Req<Incoming>> for &Server<F, S>
+impl<F, S> Service<Req<Incoming>> for Server<F, S>
 where
     F: Filter + Send + Sync + 'static,
     S: Scribe + Send + Sync + 'static,
@@ -71,10 +37,7 @@ where
     fn call(&self, req: Req<Incoming>) -> Self::Future {
         log::trace!("starting to service request");
         let Some(host) = req.uri().host() else {
-            let body = "Bad Request".as_bytes().into();
-
-            let builder = Response::builder().status(400).body(body).unwrap();
-            return Box::pin(async { Ok(builder) });
+            return Box::pin(async { Err(Error::NoHost) });
         };
 
         let host = host.to_string();
@@ -85,6 +48,68 @@ where
 
         let filter = self.filter.clone();
         let scribe = self.scribe;
+
+        if req.method() == Method::CONNECT {
+            let client_tls = self.tls.as_ref().map(|t| t.client.clone());
+            let server_tls = self.tls.as_ref().map(|t| t.server.clone());
+            let srv = self.clone();
+            let token = self.token.clone();
+            let host = host.clone();
+
+            return Box::pin(async move {
+                let Some(client_tls) = client_tls else {
+                    return Err(Error::NoTlsConfig);
+                };
+
+                let Some(server_tls) = server_tls else {
+                    return Err(Error::NoTlsConfig);
+                };
+                let host = host.clone();
+
+                let upgrade = hyper::upgrade::on(req).await?;
+
+                let io = TokioIo::new(upgrade);
+
+                let acceptor = TlsAcceptor::from(server_tls);
+                let incoming = acceptor.accept(io).await?;
+                let tunnel = TokioIo::new(incoming);
+
+                let servername = ServerName::try_from(host).unwrap();
+                let stream = TcpStream::connect(&lookup).await.unwrap();
+                let io = TokioIo::new(stream);
+
+                let connector = TlsConnector::from(client_tls);
+
+                let connect = connector.connect(servername, TokioIo::new(io)).await?;
+
+                let (sender, conn) =
+                    hyper::client::conn::http1::handshake(TokioIo::new(connect)).await?;
+
+                tokio::spawn(async move {
+                    if let Err(e) = conn.await {
+                        eprintln!("Error in connection: {}", e);
+                    }
+                });
+
+                let sender = Arc::new(Mutex::new(sender));
+
+                tokio::spawn(async move {
+                    tokio::select! {
+                        () = token.cancelled() => { }
+
+                        res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, server: srv } ) => {
+                            if let Err(err) = res {
+                                log::error!("Error service connection: {:?}", err);
+                            }
+                        }
+                    }
+                });
+
+                let body = "".as_bytes().into();
+                let builder = Response::builder().status(200).body(body).unwrap();
+                Ok(builder)
+            });
+        }
 
         Box::pin(async move {
             let mut req = collect_req(req).await?;
@@ -117,6 +142,128 @@ where
 
             let res = sender.send_request(req.map(|b| b.into())).await?;
             let mut res = collect_res(res).await?;
+
+            filter.modify_response(&lookup, &mut res).await?;
+
+            log::trace!("sending modified response to scribe");
+            scribe.report_response(ticket, &res).await;
+            log::trace!("done sending modified response to scribe");
+
+            log::trace!("finished to service request");
+            Ok(res.map(|b| b.into()))
+        })
+    }
+}
+
+impl<F, S> Service<Req<Incoming>> for Tunnel<F, S>
+where
+    F: Filter + Send + Sync + 'static,
+    S: Scribe + Send + Sync + 'static,
+{
+    type Response = Res<Full<Bytes>>;
+    type Error = Error;
+
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response>> + Send>>;
+
+    fn call(&self, req: Req<Incoming>) -> Self::Future {
+        log::trace!("starting to service request");
+        let Some(host) = req.uri().host() else {
+            return Box::pin(async { Err(Error::NoHost) });
+        };
+
+        let host = host.to_string();
+        let port = req.uri().port_u16().unwrap_or(80);
+        let lookup = format!("{host}:{port}");
+
+        log::trace!("request host detected: {lookup:?}");
+
+        let filter = self.server.filter.clone();
+        let scribe = self.server.scribe;
+
+        if req.method() == Method::CONNECT {
+            let client_tls = self.server.tls.as_ref().map(|t| t.client.clone());
+            let server_tls = self.server.tls.as_ref().map(|t| t.server.clone());
+            let srv = self.server.clone();
+            let token = self.server.token.clone();
+            let host = host.clone();
+
+            return Box::pin(async move {
+                let Some(client_tls) = client_tls else {
+                    return Err(Error::NoTlsConfig);
+                };
+
+                let Some(server_tls) = server_tls else {
+                    return Err(Error::NoTlsConfig);
+                };
+                let host = host.clone();
+
+                let upgrade = hyper::upgrade::on(req).await?;
+
+                let io = TokioIo::new(upgrade);
+
+                let acceptor = TlsAcceptor::from(server_tls);
+                let incoming = acceptor.accept(io).await?;
+                let tunnel = TokioIo::new(incoming);
+
+                let servername = ServerName::try_from(host).unwrap();
+                let stream = TcpStream::connect(&lookup).await.unwrap();
+                let io = TokioIo::new(stream);
+
+                let connector = TlsConnector::from(client_tls);
+
+                let connect = connector.connect(servername, TokioIo::new(io)).await?;
+
+                let (sender, conn) =
+                    hyper::client::conn::http1::handshake(TokioIo::new(connect)).await?;
+
+                tokio::spawn(async move {
+                    if let Err(e) = conn.await {
+                        eprintln!("Error in connection: {}", e);
+                    }
+                });
+
+                let sender = Arc::new(Mutex::new(sender));
+                tokio::spawn(async move {
+                    tokio::select! {
+                        () = token.cancelled() => { }
+
+                        res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, server: srv } ) => {
+                            if let Err(err) = res {
+                                log::error!("Error service connection: {:?}", err);
+                            }
+                        }
+                    }
+                });
+
+                let body = "".as_bytes().into();
+                let builder = Response::builder().status(200).body(body).unwrap();
+                Ok(builder)
+            });
+        }
+
+        let sender = self.sender.clone();
+        Box::pin(async move {
+            let mut req = collect_req(req).await?;
+
+            filter.modify_request(&lookup, &mut req).await?;
+
+            log::trace!("sending modified request to scribe");
+            let ticket = scribe.report_request(&req).await;
+            log::trace!("done sending modified request to scribe");
+
+            let mut builder = Uri::builder();
+            if let Some(pq) = req.uri().path_and_query() {
+                builder = builder.path_and_query(pq.clone());
+            }
+
+            *req.uri_mut() = builder.build().unwrap();
+
+            let mut res = {
+                let mut sender = sender.lock().await;
+                let res = sender.send_request(req.map(|b| b.into())).await?;
+
+                collect_res(res).await?
+            };
 
             filter.modify_response(&lookup, &mut res).await?;
 

@@ -3,15 +3,15 @@ use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
 #[derive(Parser)]
 pub struct Cli {
-    /// Attack endpoint
+    /// attack endpoint
     #[clap(short, long, default_value = "127.0.0.1:8091")]
     pub listen: SocketAddr,
 
-    /// Configure script
+    /// configure script
     #[clap(short = 'f', long = "file")]
     pub configure: Option<PathBuf>,
 
-    /// Log file
+    /// log file
     #[clap(short = 'L', long)]
     pub log: Option<PathBuf>,
 
@@ -22,12 +22,26 @@ pub struct Cli {
     /// options to connect neovim
     #[clap(short, long)]
     pub nvim: Option<NvimConnInfo>,
+
+    #[clap(flatten)]
+    pub tls: CertOpts,
 }
 
 #[derive(Clone)]
 pub enum NvimConnInfo {
     Stdin,
     Unix(PathBuf),
+}
+
+#[derive(Parser)]
+pub struct CertOpts {
+    /// private key for a tls session
+    #[clap(short, long, requires = "cert")]
+    pub key: Option<PathBuf>,
+
+    /// certificate for a tls session
+    #[clap(short, long, requires = "key")]
+    pub cert: Option<PathBuf>,
 }
 
 impl FromStr for NvimConnInfo {
