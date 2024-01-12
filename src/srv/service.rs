@@ -13,12 +13,10 @@ use hyper::{
     Response,
 };
 use rustls::pki_types::ServerName;
-use rustls::{ClientConfig, ServerConfig};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
-use tokio_util::sync::CancellationToken;
 
 use crate::srv::Tunnel;
 
@@ -66,43 +64,77 @@ where
                 };
                 let host = host.clone();
 
-                let upgrade = hyper::upgrade::on(req).await?;
-
-                let io = TokioIo::new(upgrade);
-
-                let acceptor = TlsAcceptor::from(server_tls);
-                let incoming = acceptor.accept(io).await?;
-                let tunnel = TokioIo::new(incoming);
-
-                let servername = ServerName::try_from(host).unwrap();
-                let stream = TcpStream::connect(&lookup).await.unwrap();
-                let io = TokioIo::new(stream);
-
-                let connector = TlsConnector::from(client_tls);
-
-                let connect = connector.connect(servername, TokioIo::new(io)).await?;
-
-                let (sender, conn) =
-                    hyper::client::conn::http1::handshake(TokioIo::new(connect)).await?;
-
                 tokio::spawn(async move {
-                    if let Err(e) = conn.await {
-                        eprintln!("Error in connection: {}", e);
-                    }
-                });
+                    log::trace!("upgrading connection");
+                    let upgrade = match hyper::upgrade::on(req).await {
+                        Ok(u) => u,
+                        Err(e) => {
+                            log::error!("failed to upgrade connection {e}");
+                            return;
+                        }
+                    };
 
-                let sender = Arc::new(Mutex::new(sender));
+                    log::trace!("upgraded connection");
 
-                tokio::spawn(async move {
-                    tokio::select! {
-                        () = token.cancelled() => { }
+                    let io = TokioIo::new(upgrade);
 
-                        res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, server: srv } ) => {
-                            if let Err(err) = res {
-                                log::error!("Error service connection: {:?}", err);
+                    log::trace!("creating acceptor connection");
+                    let acceptor = TlsAcceptor::from(server_tls);
+                    let incoming = match acceptor.accept(io).await {
+                        Ok(i) => i,
+                        Err(e) => {
+                            log::error!("failed to accept {e}");
+                            return;
+                        }
+                    };
+                    let tunnel = TokioIo::new(incoming);
+
+                    log::trace!("connecting to target");
+                    let servername = ServerName::try_from(host.clone()).unwrap();
+                    let stream = TcpStream::connect(&lookup).await.unwrap();
+                    let io = TokioIo::new(stream);
+
+                    let connector = TlsConnector::from(client_tls);
+
+                    let connect = match connector.connect(servername, TokioIo::new(io)).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            log::error!("failed to make connection to target {e}");
+                            return;
+                        }
+                    };
+
+                    log::trace!("creating sender");
+                    let (sender, conn) =
+                        match hyper::client::conn::http1::handshake(TokioIo::new(connect)).await {
+                            Ok(o) => o,
+                            Err(e) => {
+                                log::error!("failed to handshake {e}");
+                                return;
+                            }
+                        };
+
+                    log::trace!("spawning sender poller");
+                    tokio::spawn(async move {
+                        if let Err(e) = conn.await {
+                            eprintln!("Error in connection: {}", e);
+                        }
+                    });
+
+                    let sender = Arc::new(Mutex::new(sender));
+
+                    log::trace!("spawning tunneled server");
+                    tokio::spawn(async move {
+                        tokio::select! {
+                            () = token.cancelled() => { }
+
+                            res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, host, server: srv } ).with_upgrades() => {
+                                if let Err(err) = res {
+                                    log::error!("Error service connection: {:?}", err);
+                                }
                             }
                         }
-                    }
+                    });
                 });
 
                 let body = "".as_bytes().into();
@@ -167,9 +199,9 @@ where
 
     fn call(&self, req: Req<Incoming>) -> Self::Future {
         log::trace!("starting to service request");
-        let Some(host) = req.uri().host() else {
-            return Box::pin(async { Err(Error::NoHost) });
-        };
+
+        log::trace!("servicing tunneled request: {req:?}");
+        let host = req.uri().host().unwrap_or_else(|| &self.host);
 
         let host = host.to_string();
         let port = req.uri().port_u16().unwrap_or(80);
@@ -205,7 +237,7 @@ where
                 let incoming = acceptor.accept(io).await?;
                 let tunnel = TokioIo::new(incoming);
 
-                let servername = ServerName::try_from(host).unwrap();
+                let servername = ServerName::try_from(host.clone()).unwrap();
                 let stream = TcpStream::connect(&lookup).await.unwrap();
                 let io = TokioIo::new(stream);
 
@@ -227,7 +259,7 @@ where
                     tokio::select! {
                         () = token.cancelled() => { }
 
-                        res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, server: srv } ) => {
+                        res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, host, server: srv } ) => {
                             if let Err(err) = res {
                                 log::error!("Error service connection: {:?}", err);
                             }

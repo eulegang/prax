@@ -56,6 +56,7 @@ pub struct Server<F, S: 'static> {
 
 pub struct Tunnel<F, S: 'static> {
     sender: Arc<Mutex<SendRequest<Full<Bytes>>>>,
+    host: String,
     server: Server<F, S>,
 }
 
@@ -63,7 +64,7 @@ impl<F, S: 'static> Clone for Server<F, S> {
     fn clone(&self) -> Self {
         Server {
             token: self.token.clone(),
-            addr: self.addr.clone(),
+            addr: self.addr,
             filter: self.filter.clone(),
             scribe: self.scribe,
             tls: self.tls.clone(),

@@ -36,7 +36,7 @@ where
                     tokio::task::spawn(async move {
                         tokio::select! {
                             _ = token.cancelled() => { }
-                            res = http1::Builder::new().serve_connection(io, srv) => {
+                            res = http1::Builder::new().serve_connection(io, srv).with_upgrades() => {
                                 if let Err(err) = res {
                                     log::error!("Error service connection: {:?}", err);
                                 }

@@ -67,7 +67,7 @@ impl Tls {
 }
 
 fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>, LoadError> {
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
 
     let mut buf = BufReader::new(file);
 
@@ -84,7 +84,7 @@ fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>, LoadError> {
 }
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, LoadError> {
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     let mut certs = Vec::new();
 
     let mut buf = BufReader::new(file);
