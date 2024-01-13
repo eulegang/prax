@@ -13,6 +13,7 @@ pub struct View {
 
     intercept_win: Option<Window>,
 
+    intercept_group: i64,
     namespace: i64,
 }
 
@@ -28,19 +29,14 @@ impl View {
         let intercept_win = None;
         let namespace = neovim.create_namespace("atkpx").await?;
 
-        intercept
-            .set_keymap(
-                "n",
-                "q",
-                ":lua require(\"atkpx\").submit_intercept()<cr>",
-                vec![],
-            )
-            .await?;
-
         let win = neovim.get_current_win().await?;
         win.set_buf(&list).await?;
 
         list.set_keymap("n", "<cr>", ":lua require(\"atkpx\").detail()<cr>", vec![])
+            .await?;
+
+        let intercept_group = neovim
+            .create_augroup("AtkIntercept", vec![("clear".into(), true.into())])
             .await?;
 
         let s = Self {
@@ -50,6 +46,7 @@ impl View {
             intercept,
             intercept_win,
             namespace,
+            intercept_group,
         };
 
         let handler = Arc::new(Mutex::new(s));
@@ -187,7 +184,7 @@ impl View {
                 &self.detail,
                 true,
                 vec![
-                    ("relative".into(), "win".into()),
+                    ("relative".into(), "editor".into()),
                     ("style".into(), "minimal".into()),
                     ("row".into(), 5.into()),
                     ("col".into(), 5.into()),
@@ -216,6 +213,11 @@ impl View {
         let width = width.saturating_sub(10);
 
         self.intercept.set_lines(0, -1, true, content).await?;
+
+        self.neovim
+            .clear_autocmds(vec![("group".into(), self.intercept_group.into())])
+            .await?;
+
         let win = self
             .neovim
             .open_win(
@@ -232,6 +234,34 @@ impl View {
                 ],
             )
             .await?;
+
+        let id = win.get_number().await?;
+        let id = id + 1000; // idk why
+
+        self.neovim
+            .out_write(&format!("attaching autocmd to window {id}"))
+            .await?;
+
+        log::trace!("attaching window {id} autocmd");
+
+        self.neovim
+            .create_autocmd(
+                "WinClosed".into(),
+                vec![
+                    ("group".into(), self.intercept_group.into()),
+                    //("buffer".into(), self.intercept.get_number().await?.into()),
+                    ("pattern".into(), id.to_string().into()),
+                    (
+                        "command".into(),
+                        ":lua require(\"atkpx\").submit_intercept()".into(),
+                    ),
+                ],
+            )
+            .await?;
+
+        let num = self.neovim.get_current_win().await?.get_number().await?;
+
+        log::trace!("moved to window {num}");
 
         self.intercept_win = Some(win);
 

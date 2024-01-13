@@ -23,6 +23,7 @@ pub fn ui_binding(
 ) {
     tokio::spawn(async move {
         while let Some(event) = recv.recv().await {
+            log::trace!("handling ui event: {event:?}");
             let view = view.lock().await;
 
             match event {

@@ -3,6 +3,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::Neovim;
 
+#[derive(Debug)]
 pub enum Event {
     Detail,
     SubmitIntercept,
