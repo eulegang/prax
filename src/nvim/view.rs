@@ -32,6 +32,15 @@ impl View {
         let win = neovim.get_current_win().await?;
         win.set_buf(&list).await?;
 
+        intercept
+            .set_keymap(
+                "n",
+                "<c-q>",
+                ":lua require(\"atkpx\").submit_intercept()<cr>",
+                vec![],
+            )
+            .await?;
+
         list.set_keymap("n", "<cr>", ":lua require(\"atkpx\").detail()<cr>", vec![])
             .await?;
 
