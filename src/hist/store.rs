@@ -126,9 +126,9 @@ where
         };
 
         for _ in 0..iters {
-            let node = unsafe { cur.read_volatile() };
+            let next = unsafe { &(*cur).next };
 
-            let next = node.next.load(Ordering::SeqCst);
+            let next = next.load(Ordering::SeqCst);
 
             if next.is_null() {
                 let new = if let Some(node) = *alloced {
@@ -137,18 +137,17 @@ where
                 } else {
                     Node::alloc()
                 };
-                let node = unsafe { next.read_volatile() };
 
-                if node
-                    .next
-                    .compare_exchange(
+                let op = unsafe {
+                    &(*cur).next.compare_exchange(
                         std::ptr::null_mut(),
                         new,
                         Ordering::AcqRel,
                         Ordering::Relaxed,
                     )
-                    .is_err()
-                {
+                };
+
+                if op.is_err() {
                     *alloced = Some(new);
                 }
 
@@ -339,4 +338,17 @@ fn test_insert() {
     assert_eq!(store.get(1), Some(&4));
     assert_eq!(store.get(2), Some(&5));
     assert_eq!(store.get(3), Some(&6));
+}
+
+#[test]
+fn test_multi_block_insert() {
+    let store = Store::<usize, Random>::default();
+
+    for i in 0..36 {
+        store.insert(i, i);
+    }
+
+    dbg!(&store);
+
+    assert_eq!(store.get(34), Some(&34));
 }
