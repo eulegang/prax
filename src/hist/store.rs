@@ -162,17 +162,17 @@ where
 
     fn push_end(mut base: *mut Node<T>, new: *mut Node<T>) {
         loop {
-            let node = unsafe { base.read_volatile() };
-            let next = node.next.load(Ordering::SeqCst);
+            let next = unsafe { (*base).next.load(Ordering::SeqCst) };
 
             if next.is_null() {
-                match node
-                    .next
-                    .compare_exchange(next, new, Ordering::SeqCst, Ordering::Relaxed)
-                {
+                match unsafe {
+                    (*base)
+                        .next
+                        .compare_exchange(next, new, Ordering::SeqCst, Ordering::Relaxed)
+                } {
                     Ok(_) => break,
                     Err(_) => {
-                        base = node.next.load(Ordering::SeqCst);
+                        base = unsafe { (*base).next.load(Ordering::SeqCst) };
                     }
                 };
             } else {
