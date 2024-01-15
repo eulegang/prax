@@ -56,6 +56,7 @@ impl Body {
         }
     }
 
+    #[allow(dead_code)]
     pub fn encode(&self, encoding: Encoding) -> std::io::Result<Body> {
         Ok(Body(encoding.encode(&self.0)?))
     }

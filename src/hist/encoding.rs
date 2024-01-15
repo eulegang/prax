@@ -14,6 +14,7 @@ pub enum Encoding {
 }
 
 impl Encoding {
+    #[allow(dead_code)]
     pub fn encode(&self, bytes: &Bytes) -> std::io::Result<Bytes> {
         match self {
             Encoding::Bare => Ok(bytes.clone()),
