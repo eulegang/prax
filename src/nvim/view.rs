@@ -7,12 +7,19 @@ use super::{Buffer, Neovim, Window};
 
 pub struct View {
     neovim: Neovim,
+    pub chan: u64,
+
     list: Buffer,
-    detail: Buffer,
     intercept: Buffer,
 
-    intercept_win: Option<Window>,
+    req_detail: Buffer,
+    res_detail: Buffer,
 
+    intercept_win: Option<Window>,
+    req_win: Option<Window>,
+    res_win: Option<Window>,
+
+    detail_group: i64,
     intercept_group: i64,
     namespace: i64,
 }
@@ -23,7 +30,6 @@ impl View {
         cancel: CancellationToken,
     ) -> eyre::Result<(Arc<Mutex<Self>>, mpsc::Sender<ViewOp>)> {
         let list = neovim.create_buf(true, true).await?;
-        let detail = neovim.create_buf(false, true).await?;
         let intercept = neovim.create_buf(false, true).await?;
         list.set_name("atkpx").await?;
         let intercept_win = None;
@@ -48,14 +54,32 @@ impl View {
             .create_augroup("AtkIntercept", vec![("clear".into(), true.into())])
             .await?;
 
+        let detail_group = neovim
+            .create_augroup("AtkGroup", vec![("clear".into(), true.into())])
+            .await?;
+
+        let req_detail = neovim.create_buf(false, true).await?;
+        let res_detail = neovim.create_buf(false, true).await?;
+
+        let req_win = None;
+        let res_win = None;
+        let chan = 0;
+
         let s = Self {
             neovim,
+            chan,
+
             list,
-            detail,
             intercept,
+
+            req_detail,
+            res_detail,
             intercept_win,
+            req_win,
+            res_win,
             namespace,
             intercept_group,
+            detail_group,
         };
 
         let handler = Arc::new(Mutex::new(s));
@@ -118,6 +142,7 @@ impl View {
             ViewOp::Intercept { title, content } => self.handle_intercept(title, content).await,
 
             ViewOp::DismissIntercept => self.handle_dismiss_intercept().await,
+            ViewOp::DismissDetail => self.handle_dismiss_detail().await,
         };
 
         if let Err(e) = res {
@@ -150,7 +175,6 @@ impl View {
     }
 
     async fn handle_new_response(&mut self, entry: usize, status: u16) -> eyre::Result<()> {
-        log::trace!("new reponse found");
         let color: Value = color_status(status).into();
         self.list
             .set_extmark(
@@ -173,36 +197,91 @@ impl View {
         Ok(())
     }
 
-    async fn handle_detail(&mut self, mut req: Vec<String>, res: Vec<String>) -> eyre::Result<()> {
-        req.push(String::new());
-        req.extend(res);
+    async fn handle_detail(&mut self, req: Vec<String>, res: Vec<String>) -> eyre::Result<()> {
+        let pad = 4;
 
-        let lines = req;
-
-        self.detail.set_lines(0, -1, false, lines).await?;
+        self.req_detail.set_lines(0, -1, false, req).await?;
+        self.res_detail.set_lines(0, -1, false, res).await?;
 
         let win = self.neovim.get_current_win().await?;
         let height = win.get_height().await?;
         let width = win.get_width().await?;
 
-        let height = height.saturating_sub(10);
-        let width = width.saturating_sub(10);
+        let height = height.saturating_sub(2 * pad);
+        let width = width.saturating_sub(2 * pad);
 
-        self.neovim
+        let width = (width / 2).saturating_sub(pad / 2);
+
+        let req_win = self
+            .neovim
             .open_win(
-                &self.detail,
+                &self.req_detail,
                 true,
                 vec![
                     ("relative".into(), "editor".into()),
                     ("style".into(), "minimal".into()),
-                    ("row".into(), 5.into()),
-                    ("col".into(), 5.into()),
+                    ("row".into(), pad.into()),
+                    ("col".into(), pad.into()),
+                    ("title".into(), "Request".into()),
                     ("height".into(), height.into()),
                     ("width".into(), width.into()),
                     ("border".into(), "rounded".into()),
                 ],
             )
             .await?;
+
+        let res_win = self
+            .neovim
+            .open_win(
+                &self.res_detail,
+                true,
+                vec![
+                    ("relative".into(), "editor".into()),
+                    ("style".into(), "minimal".into()),
+                    ("row".into(), pad.into()),
+                    ("col".into(), ((2 * pad) + width).into()),
+                    ("title".into(), "Response".into()),
+                    ("height".into(), height.into()),
+                    ("width".into(), width.into()),
+                    ("border".into(), "rounded".into()),
+                ],
+            )
+            .await?;
+
+        self.neovim
+            .clear_autocmds(vec![("group".into(), self.detail_group.into())])
+            .await?;
+
+        self.neovim
+            .create_autocmd(
+                "WinClosed".into(),
+                vec![
+                    ("group".into(), self.detail_group.into()),
+                    ("pattern".into(), get_id(&req_win).to_string().into()),
+                    (
+                        "command".into(),
+                        format!(":lua vim.fn.rpcnotify({}, \"dismiss_detail\")", self.chan).into(),
+                    ),
+                ],
+            )
+            .await?;
+
+        self.neovim
+            .create_autocmd(
+                "WinClosed".into(),
+                vec![
+                    ("group".into(), self.detail_group.into()),
+                    ("pattern".into(), get_id(&res_win).to_string().into()),
+                    (
+                        "command".into(),
+                        format!(":lua vim.fn.rpcnotify({}, \"dismiss_detail\")", self.chan).into(),
+                    ),
+                ],
+            )
+            .await?;
+
+        self.req_win = Some(req_win);
+        self.res_win = Some(res_win);
 
         Ok(())
     }
@@ -244,44 +323,41 @@ impl View {
             )
             .await?;
 
-        let id = win.get_number().await?;
-        let id = id + 1000; // idk why
-
-        self.neovim
-            .out_write(&format!("attaching autocmd to window {id}"))
-            .await?;
-
-        log::trace!("attaching window {id} autocmd");
-
         self.neovim
             .create_autocmd(
                 "WinClosed".into(),
                 vec![
                     ("group".into(), self.intercept_group.into()),
-                    //("buffer".into(), self.intercept.get_number().await?.into()),
-                    ("pattern".into(), id.to_string().into()),
+                    ("pattern".into(), get_id(&win).to_string().into()),
                     (
                         "command".into(),
-                        ":lua require(\"atkpx\").submit_intercept()".into(),
+                        format!(":lua vim.fn.rpcnotify({}, \"submit_intercept\")", self.chan)
+                            .into(),
                     ),
                 ],
             )
             .await?;
-
-        let num = self.neovim.get_current_win().await?.get_number().await?;
-
-        log::trace!("moved to window {num}");
 
         self.intercept_win = Some(win);
 
         Ok(())
     }
 
-    async fn handle_dismiss_intercept(&mut self) -> eyre::Result<()> {
-        if let Some(win) = &self.intercept_win {
-            win.close(true).await?;
+    async fn handle_dismiss_detail(&mut self) -> eyre::Result<()> {
+        if let Some(win) = self.req_win.take() {
+            let _ = win.close(true).await;
+        }
 
-            self.intercept_win = None;
+        if let Some(win) = self.res_win.take() {
+            let _ = win.close(true).await;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_dismiss_intercept(&mut self) -> eyre::Result<()> {
+        if let Some(win) = self.intercept_win.take() {
+            let _ = win.close(true).await;
         }
 
         Ok(())
@@ -311,6 +387,7 @@ pub enum ViewOp {
         content: Vec<String>,
     },
 
+    DismissDetail,
     DismissIntercept,
 }
 
@@ -339,4 +416,20 @@ fn color_status(status: u16) -> &'static str {
 
         _ => "AtkpxStatusServerError",
     }
+}
+
+fn get_id(win: &Window) -> u64 {
+    let Value::Ext(1, bytes) = win.get_value() else {
+        unreachable!();
+    };
+
+    let bytes = &bytes[1..];
+
+    let mut buf = [0u8; 8];
+
+    for (i, byte) in bytes.iter().rev().enumerate() {
+        buf[7 - i] = *byte;
+    }
+
+    u64::from_be_bytes(buf)
 }

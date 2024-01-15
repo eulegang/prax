@@ -24,7 +24,7 @@ pub fn ui_binding(
     tokio::spawn(async move {
         while let Some(event) = recv.recv().await {
             log::trace!("handling ui event: {event:?}");
-            let view = view.lock().await;
+            let mut view = view.lock().await;
 
             match event {
                 Event::Detail => {
@@ -71,6 +71,14 @@ pub fn ui_binding(
                         }
                         notify.notify_one();
                     }
+                }
+
+                Event::DismissDetail => {
+                    let _ = actions.send(ViewOp::DismissDetail).await;
+                }
+
+                Event::Chan(chan) => {
+                    view.chan = chan;
                 }
             }
         }
