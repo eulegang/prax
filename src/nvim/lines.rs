@@ -111,6 +111,9 @@ impl ToLines for crate::hist::Request {
             for line in lines {
                 res.push(line.to_string());
             }
+        } else {
+            res.push("[binary]".to_string());
+            body.hex(&mut res);
         }
 
         Ok(res)
@@ -173,6 +176,9 @@ impl ToLines for crate::hist::Response {
             for line in lines {
                 res.push(line.to_string());
             }
+        } else {
+            res.push("[binary]".to_string());
+            body.hex(&mut res);
         }
 
         Ok(res)

@@ -27,6 +27,35 @@ impl Body {
         Some(s.split('\n'))
     }
 
+    pub fn hex(&self, buf: &mut Vec<String>) {
+        let mut line = String::new();
+
+        line.push_str("00000000");
+
+        for (pos, byte) in self.0.iter().enumerate() {
+            let byte = *byte;
+
+            if pos & 0x0f == 0 {
+                if !line.is_empty() {
+                    buf.push(line);
+                    line = String::new();
+                }
+
+                line.push_str(&format!("{:08X} ", pos));
+            }
+
+            if (pos & 0x0f) == 0x08 {
+                line.push(' ');
+            }
+
+            line.push_str(&format!(" {:02X}", byte));
+        }
+
+        if !line.is_empty() {
+            buf.push(line);
+        }
+    }
+
     pub fn encode(&self, encoding: Encoding) -> std::io::Result<Body> {
         Ok(Body(encoding.encode(&self.0)?))
     }
