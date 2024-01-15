@@ -2,6 +2,8 @@ use std::str::Split;
 
 use hyper::body::Bytes;
 
+use super::Encoding;
+
 #[derive(Debug, Clone)]
 pub struct Body(Bytes);
 
@@ -19,7 +21,17 @@ impl AsRef<[u8]> for Body {
 
 impl Body {
     pub fn lines(&self) -> Option<Split<char>> {
-        let s = std::str::from_utf8(&self.0).ok()?;
+        let s = std::str::from_utf8(&self.0);
+
+        let s = s.ok()?;
         Some(s.split('\n'))
+    }
+
+    pub fn encode(&self, encoding: Encoding) -> std::io::Result<Body> {
+        Ok(Body(encoding.encode(&self.0)?))
+    }
+
+    pub fn decode(&self, encoding: Encoding) -> std::io::Result<Body> {
+        Ok(Body(encoding.decode(&self.0)?))
     }
 }

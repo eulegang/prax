@@ -5,7 +5,10 @@ use hyper::{
     HeaderMap, StatusCode, Uri,
 };
 
-use crate::srv;
+use crate::{
+    hist::{Body, Encoding},
+    srv,
+};
 
 pub trait ToLines {
     type Error: std::error::Error;
@@ -82,13 +85,29 @@ impl ToLines for crate::hist::Request {
 
         res.push(status);
 
+        let mut encoding = Encoding::Bare;
+
         for (k, v) in &self.headers {
+            if k == "content-encoding" {
+                if let Ok(e) = Encoding::from_str(v) {
+                    encoding = e;
+                }
+            }
             res.push(format!("{}: {}", k, v));
         }
 
         res.push(String::new());
 
-        if let Some(lines) = self.body.lines() {
+        let b: Body;
+
+        let body = if let Ok(body) = self.body.decode(encoding) {
+            b = body;
+            &b
+        } else {
+            &self.body
+        };
+
+        if let Some(lines) = body.lines() {
             for line in lines {
                 res.push(line.to_string());
             }
@@ -129,13 +148,28 @@ impl ToLines for crate::hist::Response {
 
         res.push(self.status.to_string());
 
+        let mut encoding = Encoding::Bare;
+
         for (k, v) in &self.headers {
+            if k == "content-encoding" {
+                if let Ok(e) = Encoding::from_str(v) {
+                    encoding = e;
+                }
+            }
             res.push(format!("{}: {}", k, v));
         }
 
         res.push(String::new());
+        let b: Body;
 
-        if let Some(lines) = self.body.lines() {
+        let body = if let Ok(body) = self.body.decode(encoding) {
+            b = body;
+            &b
+        } else {
+            &self.body
+        };
+
+        if let Some(lines) = body.lines() {
             for line in lines {
                 res.push(line.to_string());
             }

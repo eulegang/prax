@@ -4,9 +4,11 @@ use std::collections::HashMap;
 mod body;
 mod conv;
 mod deser;
+mod encoding;
 mod store;
 
 pub use body::Body;
+pub use encoding::Encoding;
 use tokio::sync::broadcast;
 
 use crate::srv::Scribe;
