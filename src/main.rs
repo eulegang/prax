@@ -45,7 +45,7 @@ async fn main() -> eyre::Result<()> {
         )));
 
         let config = if let Some(path) = cli.configure {
-            Config::load(path, nvim)?
+            Config::load(&path, nvim)?
         } else {
             Config::default()
         };
@@ -54,7 +54,7 @@ async fn main() -> eyre::Result<()> {
         server.listen().await?;
     } else {
         let config = if let Some(path) = cli.configure {
-            Config::load(path, Arc::new(None))?
+            Config::load(&path, Arc::new(None))?
         } else {
             Config::default()
         };

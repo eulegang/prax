@@ -14,7 +14,7 @@ pub use target_ref::TargetRef;
 
 use crate::nvim::NVim;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Proxy {
     pub targets: Vec<Target>,
     pub focus: bool,
