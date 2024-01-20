@@ -54,13 +54,6 @@ impl Filter for Config {
                     }
                 },
 
-                Rule::SetHeader(k, v) => {
-                    if let Ok(header) = HeaderValue::from_str(v) {
-                        req.headers_mut()
-                            .insert(HeaderName::from_bytes(k.as_bytes()).unwrap(), header);
-                    }
-                }
-
                 Rule::Set(attr, value) => match attr {
                     crate::config::Attr::Method => {
                         let update = Method::from_str(value.as_str())?;
@@ -123,6 +116,7 @@ impl Filter for Config {
                         *req.body_mut() = value.as_bytes().to_owned();
                     }
                 },
+                Rule::Subst(_, _) => todo!(),
             }
         }
 
@@ -177,13 +171,6 @@ impl Filter for Config {
                     }
                 },
 
-                Rule::SetHeader(k, v) => {
-                    if let Ok(header) = HeaderValue::from_str(v) {
-                        res.headers_mut()
-                            .insert(HeaderName::from_bytes(k.as_bytes()).unwrap(), header);
-                    }
-                }
-
                 Rule::Set(attr, value) => match attr {
                     crate::config::Attr::Method => {}
                     crate::config::Attr::Path => {}
@@ -202,6 +189,7 @@ impl Filter for Config {
                         *res.body_mut() = value.as_bytes().to_owned();
                     }
                 },
+                Rule::Subst(_, _) => todo!(),
             }
         }
 

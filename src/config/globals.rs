@@ -29,35 +29,12 @@ pub async fn focus(lua: &Lua, (): ()) -> Result<()> {
     Ok(())
 }
 
-pub async fn set_header(_: &Lua, (key, value): (String, String)) -> Result<Rule> {
-    Ok(Rule::SetHeader(key, value))
-}
-
 pub async fn set(_: &Lua, (attr, value): (Attr, String)) -> Result<Rule> {
     Ok(Rule::Set(attr, value))
 }
 
 pub async fn sub<'a>(_: &'a Lua, (attr, value): (Attr, Value<'a>)) -> Result<Rule> {
     todo!();
-    /*
-    match value {
-        Value::Function(func) => {}
-        Value::UserData(data) => {
-            if data.is::<Subst>() {
-                Ok(Rule::Subst(attr, data.user_value()?))
-            } else {
-                Err(mlua::Error::UserDataTypeMismatch)
-            }
-        }
-
-        _ => Err(mlua::Error::BadArgument {
-            to: Some("sub".to_owned()),
-            pos: 1,
-            name: Some("strategy".to_owned()),
-            cause: Arc::new(mlua::Error::BindError),
-        }),
-    }
-    */
 }
 
 pub async fn header(_: &Lua, (key,): (String,)) -> Result<Attr> {

@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use mlua::{Function, Lua, OwnedFunction};
+use mlua::{Function, Lua};
 use notify::{recommended_watcher, Event, EventKind, Watcher};
 use tokio::sync::Mutex;
 
@@ -13,6 +13,7 @@ pub struct InterpState {
     funcs: Vec<Function<'static>>,
 }
 
+/*
 #[derive(Default)]
 pub struct AppData {
     proxy: Proxy,
@@ -61,13 +62,13 @@ impl InterpState {
         Ok(InterpState { lua, funcs })
     }
 }
+*/
 
 impl Config {
     pub fn load(path: &Path, nvim: Arc<Option<Mutex<NVim>>>) -> eyre::Result<Self> {
-        let (proxy, lua) = Self::eval_config(path)?;
+        let (proxy, _) = Self::eval_config(path)?;
 
-        let lua = Arc::new(Mutex::new(lua));
-        let config = Config { proxy, lua, nvim };
+        let config = Config { proxy, nvim };
         //config.watch(path)?;
 
         Ok(config)
@@ -130,11 +131,6 @@ impl Config {
             globals.set("focus", lua.create_async_function(globals::focus)?)?;
             globals.set("header", lua.create_async_function(globals::header)?)?;
             globals.set("query", lua.create_async_function(globals::query)?)?;
-
-            globals.set(
-                "set_header",
-                lua.create_async_function(globals::set_header)?,
-            )?;
 
             globals.set("set", lua.create_async_function(globals::set)?)?;
             globals.set("sub", lua.create_async_function(globals::sub)?)?;

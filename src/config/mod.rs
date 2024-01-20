@@ -3,16 +3,18 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 mod err;
+mod filter;
 mod globals;
+mod interp;
 mod load;
 mod target_ref;
-
-mod filter;
 
 pub use err::ConfError;
 pub use target_ref::TargetRef;
 
 use crate::nvim::NVim;
+
+use self::interp::Interp;
 
 #[derive(Default, Clone)]
 pub struct Proxy {
@@ -29,11 +31,10 @@ pub struct Target {
 
 #[derive(FromLua, Debug, Clone)]
 pub enum Rule {
-    SetHeader(String, String),
     Intercept,
     Dump,
     Set(Attr, String),
-    //Subst(Attr, Subst),
+    Subst(Attr, Subst),
 }
 
 #[derive(FromLua, Debug, Clone)]
@@ -58,10 +59,6 @@ type UProxy = Arc<Mutex<Proxy>>;
 pub struct Config {
     proxy: UProxy,
     nvim: Arc<Option<Mutex<NVim>>>,
-
-    // May need in future and need to ensure lua interp stays around
-    #[allow(dead_code)]
-    lua: Arc<Mutex<Lua>>,
 }
 
 impl UserData for Rule {}
