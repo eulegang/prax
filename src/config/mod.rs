@@ -32,6 +32,24 @@ pub enum Rule {
     SetHeader(String, String),
     Intercept,
     Dump,
+    Set(Attr, String),
+    //Subst(Attr, Subst),
+}
+
+#[derive(FromLua, Debug, Clone)]
+pub enum Subst {
+    Func(usize),
+    System(String),
+}
+
+#[derive(FromLua, Debug, Clone)]
+pub enum Attr {
+    Method,
+    Status,
+    Path,
+    Query(String),
+    Header(String),
+    Body,
 }
 
 type UProxy = Arc<Mutex<Proxy>>;
@@ -47,3 +65,4 @@ pub struct Config {
 }
 
 impl UserData for Rule {}
+impl UserData for Attr {}

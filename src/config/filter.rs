@@ -1,10 +1,14 @@
-use hyper::header::{HeaderName, HeaderValue};
+use hyper::{
+    header::{HeaderName, HeaderValue},
+    http::uri::PathAndQuery,
+    Method, StatusCode, Uri,
+};
 
 use crate::srv::{Filter, Result};
 
 use super::{Config, Rule};
 
-use std::io::Write;
+use std::{io::Write, str::FromStr};
 
 impl Filter for Config {
     async fn modify_request(
@@ -56,6 +60,69 @@ impl Filter for Config {
                             .insert(HeaderName::from_bytes(k.as_bytes()).unwrap(), header);
                     }
                 }
+
+                Rule::Set(attr, value) => match attr {
+                    crate::config::Attr::Method => {
+                        let update = Method::from_str(value.as_str())?;
+
+                        *req.method_mut() = update;
+                    }
+                    crate::config::Attr::Status => {}
+                    crate::config::Attr::Path => {
+                        let mut parts = req.uri().clone().into_parts();
+                        let pq = if let Some(pq) = parts.path_and_query {
+                            if let Some(query) = pq.query() {
+                                PathAndQuery::from_str(&format!("{}?{}", value, query))?
+                            } else {
+                                PathAndQuery::from_str(&value)?
+                            }
+                        } else {
+                            PathAndQuery::from_str(&value)?
+                        };
+
+                        parts.path_and_query = Some(pq);
+
+                        *req.uri_mut() = Uri::from_parts(parts).unwrap();
+                    }
+                    crate::config::Attr::Query(key) => {
+                        let val = if value.is_empty() {
+                            "".to_string()
+                        } else {
+                            format!("={value}")
+                        };
+
+                        let mut parts = req.uri().clone().into_parts();
+                        let pq = if let Some(pq) = parts.path_and_query {
+                            if let Some(query) = pq.query() {
+                                if query.is_empty() {
+                                    PathAndQuery::from_str(&format!("{}?{}{}", value, key, value))?
+                                } else {
+                                    PathAndQuery::from_str(&format!(
+                                        "{}?{}&{}{}",
+                                        value, query, key, val
+                                    ))?
+                                }
+                            } else {
+                                PathAndQuery::from_str(&format!("{}?{}{}", pq.path(), key, val))?
+                            }
+                        } else {
+                            PathAndQuery::from_str(&format!("/?{key}{val}"))?
+                        };
+
+                        parts.path_and_query = Some(pq);
+
+                        *req.uri_mut() = Uri::from_parts(parts).unwrap();
+                    }
+                    crate::config::Attr::Header(key) => {
+                        if let Ok(header) = HeaderValue::from_str(&value) {
+                            req.headers_mut()
+                                .insert(HeaderName::from_bytes(key.as_bytes()).unwrap(), header);
+                        }
+                    }
+                    crate::config::Attr::Body => {
+                        *req.body_mut() = value.as_bytes().to_owned();
+                    }
+                },
             }
         }
 
@@ -116,6 +183,25 @@ impl Filter for Config {
                             .insert(HeaderName::from_bytes(k.as_bytes()).unwrap(), header);
                     }
                 }
+
+                Rule::Set(attr, value) => match attr {
+                    crate::config::Attr::Method => {}
+                    crate::config::Attr::Path => {}
+                    crate::config::Attr::Query(_) => {}
+                    crate::config::Attr::Status => {
+                        let status = StatusCode::from_str(value).unwrap();
+                        *res.status_mut() = status;
+                    }
+                    crate::config::Attr::Header(key) => {
+                        if let Ok(header) = HeaderValue::from_str(&value) {
+                            res.headers_mut()
+                                .insert(HeaderName::from_bytes(key.as_bytes()).unwrap(), header);
+                        }
+                    }
+                    crate::config::Attr::Body => {
+                        *res.body_mut() = value.as_bytes().to_owned();
+                    }
+                },
             }
         }
 

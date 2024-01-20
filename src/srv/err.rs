@@ -32,6 +32,9 @@ pub enum Error {
     #[error("Invalid invalid header value")]
     HeaderValue(#[from] hyper::header::InvalidHeaderValue),
 
+    #[error("Invalid uri built")]
+    Uri(#[from] hyper::http::uri::InvalidUri),
+
     #[error("Invalid invalid method")]
     Method(#[from] hyper::http::method::InvalidMethod),
 

@@ -1,10 +1,12 @@
--- focus()
+--focus()
+
+target("google.com:443")
 
 target('localhost:8000')
     :req(
-      set_header("Authorization", "Bearer xyz"),
-      intercept
+      set(header("Authorization"), "Bearer abc"),
+      set(query("xyz"), "true")
     )
     :resp(
-      set_header("X-AttackProxy", "set")
+      set(header("X-AttackProxy"), "set")
     )

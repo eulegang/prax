@@ -28,7 +28,6 @@ pub struct NVim {
     view: Arc<Mutex<View>>,
     action: mpsc::Sender<ViewOp>,
     backlog: Arc<Mutex<VecDeque<Arc<Notify>>>>,
-    //pub view: Arc<Mutex<AppState>>,
 }
 
 impl NVim {
