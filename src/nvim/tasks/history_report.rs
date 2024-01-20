@@ -1,6 +1,7 @@
 use tokio::sync::mpsc::Sender;
 
-use crate::{hist::Hist, nvim::view::ViewOp};
+use crate::nvim::view::ViewOp;
+use prax::hist::{Hist, HistoryEvent};
 
 pub fn history_report(actions: Sender<ViewOp>, history: &'static Hist) {
     tokio::spawn(async move {
@@ -12,7 +13,7 @@ pub fn history_report(actions: Sender<ViewOp>, history: &'static Hist) {
             };
 
             match event {
-                crate::hist::HistoryEvent::Request { index } => {
+                HistoryEvent::Request { index } => {
                     let entry = index;
                     let Some(request) = history.request(index) else {
                         continue;
@@ -30,7 +31,7 @@ pub fn history_report(actions: Sender<ViewOp>, history: &'static Hist) {
                         break;
                     }
                 }
-                crate::hist::HistoryEvent::Response { index } => {
+                HistoryEvent::Response { index } => {
                     let entry = index;
                     let Some(response) = history.response(index) else {
                         continue;

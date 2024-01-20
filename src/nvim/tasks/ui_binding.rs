@@ -5,14 +5,12 @@ use tokio::sync::{
     Mutex, Notify,
 };
 
-use crate::{
-    hist::Hist,
-    nvim::{
-        handler::Event,
-        lines::ToLines,
-        view::{View, ViewOp},
-    },
+use crate::nvim::{
+    handler::Event,
+    view::{View, ViewOp},
 };
+use prax::hist::Hist;
+use prax::lines::ToLines;
 
 pub fn ui_binding(
     mut recv: Receiver<Event>,

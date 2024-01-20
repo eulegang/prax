@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use mlua::{Lua, Result, Value};
 
 use super::{Attr, Rule, Subst, Target, TargetRef, UProxy};
@@ -33,7 +31,7 @@ pub async fn set(_: &Lua, (attr, value): (Attr, String)) -> Result<Rule> {
     Ok(Rule::Set(attr, value))
 }
 
-pub async fn sub<'a>(_: &'a Lua, (attr, value): (Attr, Value<'a>)) -> Result<Rule> {
+pub async fn sub<'a>(_: &'a Lua, (_, _): (Attr, Value<'a>)) -> Result<Rule> {
     todo!();
 }
 
@@ -43,8 +41,4 @@ pub async fn header(_: &Lua, (key,): (String,)) -> Result<Attr> {
 
 pub async fn query(_: &Lua, (key,): (String,)) -> Result<Attr> {
     Ok(Attr::Query(key))
-}
-
-pub async fn system(_: &Lua, (cmd,): (String,)) -> Result<Subst> {
-    Ok(Subst::System(cmd))
 }

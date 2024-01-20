@@ -5,15 +5,14 @@ mod body;
 mod conv;
 mod deser;
 mod encoding;
-mod store;
 
 pub use body::Body;
 pub use encoding::Encoding;
 use tokio::sync::broadcast;
 
-use crate::srv::Scribe;
+use crate::bind::{Req, Res, Scribe};
 
-use self::store::{Append, Random, Store};
+use crate::store::{Append, Random, Store};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Request {
@@ -64,7 +63,7 @@ pub struct History(Vec<Entry>);
 impl Scribe for Hist {
     type Ticket = usize;
 
-    async fn report_request(&self, req: &crate::srv::Req<Vec<u8>>) -> usize {
+    async fn report_request(&self, req: &Req<Vec<u8>>) -> usize {
         let req = Request::from(req);
         let index = self.requests.push(req);
 
@@ -73,7 +72,7 @@ impl Scribe for Hist {
         index
     }
 
-    async fn report_response(&self, index: Self::Ticket, res: &crate::srv::Res<Vec<u8>>) {
+    async fn report_response(&self, index: Self::Ticket, res: &Res<Vec<u8>>) {
         let res = Response::from(res);
 
         if self.responses.insert(index, res) {

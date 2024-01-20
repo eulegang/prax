@@ -1,22 +1,20 @@
 use std::{collections::VecDeque, sync::Arc};
 
-use crate::{
-    cli::NvimConnInfo,
-    hist::Hist,
-    srv::{self, Filter},
-};
+use crate::cli::NvimConnInfo;
+use prax::hist::Hist;
+use prax::{Filter, Req, Res};
 use tokio::sync::{mpsc, Mutex, Notify};
 use tokio_util::sync::CancellationToken;
 
+use prax::lines::{LinesImprint, ToLines};
+
 use self::{
     handler::Handler,
-    lines::{LinesImprint, ToLines},
     view::{View, ViewOp},
 };
 
 mod handler;
 mod io;
-mod lines;
 mod tasks;
 mod view;
 
@@ -58,7 +56,7 @@ impl NVim {
 }
 
 impl Filter for NVim {
-    async fn modify_request(&self, _: &str, req: &mut crate::srv::Req<Vec<u8>>) -> srv::Result<()> {
+    async fn modify_request(&self, _: &str, req: &mut Req<Vec<u8>>) -> prax::Result<()> {
         let content = req.to_lines()?;
 
         let notify = {
@@ -91,11 +89,7 @@ impl Filter for NVim {
         Ok(())
     }
 
-    async fn modify_response(
-        &self,
-        _: &str,
-        res: &mut crate::srv::Res<Vec<u8>>,
-    ) -> srv::Result<()> {
+    async fn modify_response(&self, _: &str, res: &mut Res<Vec<u8>>) -> prax::Result<()> {
         let content = res.to_lines()?;
 
         let notify = {

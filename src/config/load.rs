@@ -1,7 +1,6 @@
 use std::{path::Path, sync::Arc};
 
 use mlua::{Function, Lua};
-use notify::{recommended_watcher, Event, EventKind, Watcher};
 use tokio::sync::Mutex;
 
 use crate::nvim::NVim;

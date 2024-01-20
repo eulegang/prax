@@ -5,10 +5,7 @@ use hyper::{
     HeaderMap, StatusCode, Uri,
 };
 
-use crate::{
-    hist::{Body, Encoding},
-    srv,
-};
+use crate::hist::{self, Body, Encoding};
 
 pub trait ToLines {
     type Error: std::error::Error;
@@ -23,7 +20,7 @@ pub trait LinesImprint {
 }
 
 impl ToLines for hyper::Request<Vec<u8>> {
-    type Error = srv::Error;
+    type Error = crate::Error;
 
     fn to_lines(&self) -> Result<Vec<String>, Self::Error> {
         let mut res = Vec::new();
@@ -56,7 +53,7 @@ impl ToLines for hyper::Request<Vec<u8>> {
     }
 }
 
-impl ToLines for crate::hist::Request {
+impl ToLines for hist::Request {
     type Error = Infallible;
 
     fn to_lines(&self) -> Result<Vec<String>, Self::Error> {
@@ -121,7 +118,7 @@ impl ToLines for crate::hist::Request {
 }
 
 impl ToLines for hyper::Response<Vec<u8>> {
-    type Error = srv::Error;
+    type Error = crate::Error;
 
     fn to_lines(&self) -> Result<Vec<String>, Self::Error> {
         let mut res = Vec::new();
@@ -186,11 +183,11 @@ impl ToLines for crate::hist::Response {
 }
 
 impl LinesImprint for hyper::Request<Vec<u8>> {
-    type Error = srv::Error;
+    type Error = crate::Error;
 
     fn imprint(&mut self, lines: Vec<String>) -> Result<(), Self::Error> {
         let Some(status) = lines.first() else {
-            return Err(srv::Error::InterceptMalformed);
+            return Err(crate::Error::InterceptMalformed);
         };
 
         let (method, uri) = extract_status(self.uri(), status)?;
@@ -229,11 +226,11 @@ impl LinesImprint for hyper::Request<Vec<u8>> {
 }
 
 impl LinesImprint for hyper::Response<Vec<u8>> {
-    type Error = srv::Error;
+    type Error = crate::Error;
 
     fn imprint(&mut self, lines: Vec<String>) -> Result<(), Self::Error> {
         let Some(status) = lines.first() else {
-            return Err(srv::Error::InterceptMalformed);
+            return Err(crate::Error::InterceptMalformed);
         };
 
         let code = StatusCode::from_str(status)?;
@@ -270,9 +267,9 @@ impl LinesImprint for hyper::Response<Vec<u8>> {
     }
 }
 
-fn extract_status(uri: &Uri, lines: &str) -> srv::Result<(hyper::Method, hyper::Uri)> {
+fn extract_status(uri: &Uri, lines: &str) -> crate::Result<(hyper::Method, hyper::Uri)> {
     let Some((method, path)) = lines.split_once(' ') else {
-        return Err(srv::Error::InterceptMalformed);
+        return Err(crate::Error::InterceptMalformed);
     };
 
     let method = hyper::Method::from_str(method)?;

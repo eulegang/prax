@@ -1,5 +1,6 @@
-use super::{Filter, Scribe, Server};
+use super::Server;
 use hyper::server::conn::http1;
+use prax::{Filter, Scribe};
 use tokio::{io, net::TcpSocket};
 
 use hyper_util::rt::TokioIo;

@@ -4,18 +4,14 @@ use hyper::{
     Method, StatusCode, Uri,
 };
 
-use crate::srv::{Filter, Result};
+use prax::{Filter, Result};
 
 use super::{Config, Rule};
 
 use std::{io::Write, str::FromStr};
 
 impl Filter for Config {
-    async fn modify_request(
-        &self,
-        hostname: &str,
-        req: &mut crate::srv::Req<Vec<u8>>,
-    ) -> Result<()> {
+    async fn modify_request(&self, hostname: &str, req: &mut prax::Req<Vec<u8>>) -> Result<()> {
         let proxy = self.proxy.lock().await;
 
         log::debug!("applying config request rules to {hostname}");
@@ -124,11 +120,7 @@ impl Filter for Config {
         Ok(())
     }
 
-    async fn modify_response(
-        &self,
-        hostname: &str,
-        res: &mut crate::srv::Res<Vec<u8>>,
-    ) -> Result<()> {
+    async fn modify_response(&self, hostname: &str, res: &mut prax::Res<Vec<u8>>) -> Result<()> {
         let proxy = self.proxy.lock().await;
 
         log::debug!("applying response rules to {hostname}");

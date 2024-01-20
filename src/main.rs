@@ -1,5 +1,5 @@
 use config::Config;
-use hist::Hist;
+use prax::hist::Hist;
 use srv::Tls;
 use std::{fs::File, sync::Arc};
 use tokio_util::sync::CancellationToken;
@@ -10,7 +10,6 @@ use tokio::sync::Mutex;
 
 mod cli;
 mod config;
-mod hist;
 mod srv;
 
 mod nvim;

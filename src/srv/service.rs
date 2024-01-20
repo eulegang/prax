@@ -20,7 +20,8 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use crate::srv::Tunnel;
 
-use super::{Error, Filter, Req, Res, Result, Scribe, Server};
+use super::Server;
+use prax::{Error, Filter, Req, Res, Result, Scribe};
 
 impl<F, S> Service<Req<Incoming>> for Server<F, S>
 where

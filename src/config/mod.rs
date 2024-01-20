@@ -1,4 +1,4 @@
-use mlua::{FromLua, Lua, UserData};
+use mlua::{FromLua, UserData};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -13,8 +13,6 @@ pub use err::ConfError;
 pub use target_ref::TargetRef;
 
 use crate::nvim::NVim;
-
-use self::interp::Interp;
 
 #[derive(Default, Clone)]
 pub struct Proxy {
