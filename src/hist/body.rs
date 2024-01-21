@@ -4,7 +4,7 @@ use hyper::body::Bytes;
 
 use super::Encoding;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Body(Bytes);
 
 impl From<Vec<u8>> for Body {
@@ -29,8 +29,6 @@ impl Body {
 
     pub fn hex(&self, buf: &mut Vec<String>) {
         let mut line = String::new();
-
-        line.push_str("00000000");
 
         for (pos, byte) in self.0.iter().enumerate() {
             let byte = *byte;

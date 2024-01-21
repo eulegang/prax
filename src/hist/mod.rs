@@ -6,6 +6,9 @@ mod conv;
 mod deser;
 mod encoding;
 
+#[cfg(test)]
+mod test;
+
 pub use body::Body;
 pub use encoding::Encoding;
 use tokio::sync::broadcast;
@@ -14,7 +17,7 @@ use crate::bind::{Req, Res, Scribe};
 
 use crate::store::{Append, Random, Store};
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Request {
     pub method: String,
     pub path: String,
@@ -24,14 +27,14 @@ pub struct Request {
     pub body: Body,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Response {
     pub status: u16,
     pub headers: HashMap<String, String>,
     pub body: Body,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Ent<'a> {
     pub request: &'a Request,
     pub response: Option<&'a Response>,
@@ -43,7 +46,7 @@ pub struct Entry {
     pub response: Option<Response>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum HistoryEvent {
     Request { index: usize },
     Response { index: usize },

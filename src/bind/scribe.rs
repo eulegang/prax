@@ -20,3 +20,17 @@ impl Scribe for () {
     async fn report_request(&self, _: &super::Req<Vec<u8>>) -> Self::Ticket {}
     async fn report_response(&self, _: Self::Ticket, _: &super::Res<Vec<u8>>) {}
 }
+
+#[tokio::test]
+async fn test_null() {
+    let req = Req::builder()
+        .method("GET")
+        .header("Host", "example.com")
+        .body(Vec::new())
+        .unwrap();
+
+    let res = Res::builder().status(200).body(Vec::new()).unwrap();
+
+    let ticket = ().report_request(&req).await;
+    ().report_response(ticket, &res).await;
+}

@@ -26,3 +26,27 @@ impl Filter for () {
         Ok(())
     }
 }
+
+#[tokio::test]
+async fn test_null_filter() {
+    let mut req = Req::builder()
+        .method("GET")
+        .header("Host", "example.com")
+        .body(Vec::new())
+        .unwrap();
+    let init_req = req.clone();
+
+    let mut res = Res::builder().status(200).body(Vec::new()).unwrap();
+    let init_res = res.clone();
+
+    ().modify_request("example.com", &mut req).await.unwrap();
+    ().modify_response("example.com", &mut res).await.unwrap();
+
+    assert_eq!(req.uri(), init_req.uri());
+    assert_eq!(req.headers(), init_req.headers());
+    assert_eq!(req.body(), init_req.body());
+
+    assert_eq!(res.status(), init_res.status());
+    assert_eq!(res.headers(), init_res.headers());
+    assert_eq!(res.body(), init_res.body());
+}
