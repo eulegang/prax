@@ -1,4 +1,4 @@
-mod hyper_req {
+mod hyper_req_lines {
     use crate::lines::ToLines;
 
     #[test]
@@ -184,6 +184,66 @@ mod hist_res {
                 "hello".to_string(),
                 "world".to_string()
             ]
+        );
+    }
+}
+
+mod hyper_req_imprint {
+    use hyper::Method;
+
+    use crate::lines::LinesImprint;
+
+    #[test]
+    fn get() {
+        let lines = vec![
+            "POST /foobar?xyz=abc".to_string(),
+            "user-agent: curl".to_string(),
+            "".to_string(),
+            "{\"foobar\": true}".to_string(),
+        ];
+
+        let bytes = b"hello\nworld\n".to_vec();
+        let mut req = hyper::Request::new(bytes);
+
+        req.imprint(lines).unwrap();
+
+        assert_eq!(req.method(), Method::POST);
+        assert_eq!(req.uri().query(), Some("xyz=abc"));
+        assert_eq!(req.uri().path(), "/foobar");
+
+        assert_eq!(req.headers().len(), 1);
+        assert_eq!(
+            req.headers().get("user-agent"),
+            Some(hyper::header::HeaderValue::from_static("curl")).as_ref()
+        );
+    }
+}
+
+mod hyper_res_imprint {
+    use hyper::StatusCode;
+
+    use crate::lines::LinesImprint;
+
+    #[test]
+    fn get() {
+        let lines = vec![
+            "404".to_string(),
+            "server: nginx".to_string(),
+            "".to_string(),
+            "{\"foobar\": true}".to_string(),
+        ];
+
+        let bytes = b"hello\nworld\n".to_vec();
+        let mut res = hyper::Response::new(bytes);
+
+        res.imprint(lines).unwrap();
+
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        assert_eq!(res.headers().len(), 1);
+        assert_eq!(
+            res.headers().get("server"),
+            Some(hyper::header::HeaderValue::from_static("nginx")).as_ref()
         );
     }
 }
