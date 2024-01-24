@@ -1,5 +1,5 @@
 --- @module 'prax'
---focus()
+focus()
 
 target("google.com:443")
 
