@@ -52,6 +52,44 @@ pub async fn run_check(module: &str) {
             );
         }
     }
+
+    for res in find_responses(&base).await {
+        let name = extract_name(&res);
+
+        let input = lines(&res).await;
+        let mut input_res = hyper::Response::new(Vec::new());
+        input_res.imprint(input).unwrap();
+
+        if let Err(e) = config
+            .modify_response("example.com:3000", &mut input_res)
+            .await
+        {
+            panic!(
+                "failed to process request {} {:?} {}",
+                res.display(),
+                input_res,
+                e
+            );
+        }
+
+        let expectation = expectation(&res);
+        let output = lines(&expectation).await;
+        let mut output_res = hyper::Response::new(Vec::new());
+        output_res.imprint(output).unwrap();
+
+        let validations = input_res.validate_with(&output_res);
+
+        if !validations.is_empty() {
+            let mut buf = String::new();
+            for val in validations {
+                buf.push_str(&format!("- {}\n", val));
+            }
+            panic!(
+                "{name}\n{}\n{:#?}\n\n != \n\n{:#?}",
+                buf, input_res, output_res
+            );
+        }
+    }
 }
 
 pub enum ValError<'a> {
@@ -78,6 +116,10 @@ pub enum ValError<'a> {
         actual: &'a [u8],
         expected: &'a [u8],
     },
+    Status {
+        actual: hyper::StatusCode,
+        expected: hyper::StatusCode,
+    },
 }
 
 impl<'a> std::fmt::Display for ValError<'a> {
@@ -101,6 +143,9 @@ impl<'a> std::fmt::Display for ValError<'a> {
             ),
             ValError::Body { actual, expected } => {
                 write!(f, "expected body {expected:?} but got {actual:?}")
+            }
+            ValError::Status { actual, expected } => {
+                write!(f, "expected status {expected:?} but got {actual:?}")
             }
         }
     }
@@ -166,6 +211,55 @@ impl Validate for hyper::Request<Vec<u8>> {
     }
 }
 
+impl Validate for hyper::Response<Vec<u8>> {
+    fn validate_with<'a>(&'a self, expectation: &'a Self) -> Vec<ValError<'a>> {
+        let mut vals = vec![];
+        if self.status() != expectation.status() {
+            vals.push(ValError::Status {
+                actual: self.status(),
+                expected: expectation.status(),
+            });
+        }
+
+        let actual_keys: HashSet<String> = self.headers().keys().map(ToString::to_string).collect();
+        let expect_keys: HashSet<String> = expectation
+            .headers()
+            .keys()
+            .map(ToString::to_string)
+            .collect();
+
+        for key in expect_keys.difference(&actual_keys) {
+            vals.push(ValError::MissingHeader(key.to_string()));
+        }
+
+        for key in actual_keys.difference(&expect_keys) {
+            vals.push(ValError::ExtraHeader(key.to_string()));
+        }
+
+        for key in actual_keys.intersection(&expect_keys) {
+            let actual = &self.headers()[key];
+            let expected = &expectation.headers()[key];
+
+            if actual != expected {
+                vals.push(ValError::HeaderMismatch {
+                    key: key.to_string(),
+                    actual: actual.to_str().unwrap().to_string(),
+                    expected: expected.to_str().unwrap().to_string(),
+                });
+            }
+        }
+
+        if self.body() != expectation.body() {
+            vals.push(ValError::Body {
+                actual: self.body(),
+                expected: expectation.body(),
+            });
+        }
+
+        vals
+    }
+}
+
 async fn find_requests(base: &Path) -> Vec<PathBuf> {
     let mut dir = tokio::fs::read_dir(base).await.unwrap();
     let mut res = Vec::new();
@@ -186,6 +280,33 @@ async fn find_requests(base: &Path) -> Vec<PathBuf> {
         };
 
         if name.ends_with(".in.req") {
+            res.push(ent.path());
+        }
+    }
+
+    res
+}
+
+async fn find_responses(base: &Path) -> Vec<PathBuf> {
+    let mut dir = tokio::fs::read_dir(base).await.unwrap();
+    let mut res = Vec::new();
+
+    loop {
+        let ent = dir.next_entry().await.unwrap();
+        let Some(ent) = ent else {
+            break;
+        };
+
+        let path = ent.path();
+        let Some(os_str) = path.file_name() else {
+            continue;
+        };
+
+        let Some(name) = os_str.to_str() else {
+            continue;
+        };
+
+        if name.ends_with(".in.res") {
             res.push(ent.path());
         }
     }
