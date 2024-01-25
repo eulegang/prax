@@ -1,0 +1,3 @@
+GET /
+host: example.com:3000
+authentication: Bearer abc

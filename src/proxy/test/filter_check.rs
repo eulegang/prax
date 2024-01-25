@@ -223,5 +223,5 @@ fn expectation(path: &Path) -> PathBuf {
 fn extract_name(path: &Path) -> String {
     let Some(os) = path.file_name() else { panic!() };
     let Some(s) = os.to_str() else { panic!() };
-    s.replace(".in.req", "")
+    s.replace(".in.req", "").replace(".in.res", "")
 }
