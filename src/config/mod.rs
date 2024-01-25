@@ -5,7 +5,6 @@ use tokio::sync::Mutex;
 mod err;
 mod filter;
 mod globals;
-mod interp;
 mod load;
 mod target_ref;
 

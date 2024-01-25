@@ -8,6 +8,8 @@ mod globals;
 mod load;
 mod target_ref;
 
+mod interp;
+
 #[cfg(test)]
 mod test;
 
@@ -37,9 +39,11 @@ pub enum Rule {
     Subst(Attr, Subst),
 }
 
+pub type Func = usize;
+
 #[derive(FromLua, Debug, Clone)]
 pub enum Subst {
-    Func(usize),
+    Func(Func),
     System(String),
 }
 
