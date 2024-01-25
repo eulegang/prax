@@ -1,5 +1,6 @@
 pub mod hist;
 pub mod lines;
+pub mod proxy;
 pub mod store;
 
 mod bind;
