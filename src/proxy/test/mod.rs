@@ -1,15 +1,6 @@
-#[tokio::test]
-async fn test_proxy_rules() {
-    let mut dir_list = tokio::fs::read_dir("src/proxy/test").await.unwrap();
-    loop {
-        let ent = dir_list.next_entry().await.unwrap();
-        let Some(ent) = ent else {
-            break;
-        };
+mod filter_check;
 
-        let metadata = ent.metadata().await.unwrap();
-        if metadata.is_dir() {
-            todo!("test example case");
-        }
-    }
+#[tokio::test]
+async fn test_set_header() {
+    filter_check::run_check("headers").await;
 }
