@@ -1,11 +1,11 @@
 use std::{path::Path, sync::Arc};
 
-use mlua::{AppDataRefMut, FromLua, Function, IntoLua, Lua};
+use mlua::{AppDataRefMut, FromLua, Function, IntoLua, Lua, UserData, Variadic};
 use tokio::sync::mpsc::Sender;
 
 use crate::proxy::Target;
 
-use super::{Attr, Func, Proxy, Rule, Subst, TargetRef};
+use super::{Attr, Func, Proxy, Rule, Subst};
 
 type Return = Val;
 type Input = Val;
@@ -24,9 +24,9 @@ struct Invocation {
     input: Input,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Interp {
-    sender: Sender<Invocation>,
+    sender: Option<Sender<Invocation>>,
 }
 
 #[derive(Default)]
@@ -37,7 +37,7 @@ struct AppData {
 
 impl Interp {
     pub fn new(path: &Path, proxy: tokio::sync::oneshot::Sender<mlua::Result<Proxy>>) -> Self {
-        let (sender, mut rx) = tokio::sync::mpsc::channel::<Invocation>(1);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Invocation>(1);
 
         let path = path.to_path_buf();
         std::thread::spawn(move || {
@@ -86,12 +86,20 @@ impl Interp {
             }
         });
 
+        let sender = Some(tx);
+
         Interp { sender }
     }
 
     fn load(path: &Path) -> mlua::Result<Lua> {
-        let lua = Lua::new();
+        let Ok(content) = std::fs::read(path) else {
+            return Err(mlua::Error::RuntimeError(format!(
+                "could not read lua file \"{}\"",
+                path.display()
+            )));
+        };
 
+        let lua = Lua::new();
         let appdata = AppData::default();
 
         lua.set_app_data(appdata);
@@ -116,10 +124,20 @@ impl Interp {
             globals.set("body", lua.create_userdata(Attr::Body)?)?;
         }
 
+        let chunk = lua.load(content).set_name("prax-config");
+
+        chunk.exec()?;
+
         Ok(lua)
     }
 
     pub async fn invoke(&self, func: Func, arg: Val) -> mlua::Result<Val> {
+        let Some(sender) = &self.sender else {
+            return Err(mlua::Error::RuntimeError(
+                "lua interpreter is not initiated".to_string(),
+            ));
+        };
+
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         let invok = Invocation {
@@ -128,15 +146,16 @@ impl Interp {
             input: arg,
         };
 
-        if let Err(e) = self.sender.send(invok).await {
+        if let Err(e) = sender.send(invok).await {
             return Err(mlua::Error::RuntimeError(format!(
                 "lua thread exited {}",
                 e
             )));
         }
 
-        rx.await
-            .map_err(|_| mlua::Error::RuntimeError("failed to receive ".to_string()))
+        Ok(rx
+            .await
+            .map_err(|_| mlua::Error::RuntimeError("failed to receive ".to_string()))??)
     }
 }
 
@@ -239,4 +258,64 @@ impl<'lua> FromLua<'lua> for Val {
             ))),
         }
     }
+}
+
+#[derive(FromLua, Clone)]
+pub struct TargetRef {
+    pub hostname: String,
+}
+
+impl UserData for TargetRef {
+    fn add_fields<'lua, F: mlua::prelude::LuaUserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("hostname", |_, this| Ok(this.hostname.clone()))
+    }
+
+    fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_async_function("req", target_ref_req);
+        methods.add_async_function("resp", target_ref_resp);
+    }
+}
+
+async fn target_ref_req(
+    lua: &Lua,
+    (target, rules): (TargetRef, Variadic<Rule>),
+) -> mlua::Result<TargetRef> {
+    let mut appdata = app_data_mut(lua)?;
+
+    let t = appdata
+        .proxy
+        .targets
+        .iter_mut()
+        .find(|name| name.hostname == target.hostname)
+        .ok_or_else(|| {
+            mlua::Error::RuntimeError(format!("invalid host target \"{}\"", target.hostname))
+        })?;
+
+    for r in rules {
+        t.req.push(r);
+    }
+
+    Ok(target)
+}
+
+async fn target_ref_resp(
+    lua: &Lua,
+    (target, rules): (TargetRef, Variadic<Rule>),
+) -> mlua::Result<TargetRef> {
+    let mut appdata = app_data_mut(lua)?;
+
+    let t = appdata
+        .proxy
+        .targets
+        .iter_mut()
+        .find(|name| name.hostname == target.hostname)
+        .ok_or_else(|| {
+            mlua::Error::RuntimeError(format!("invalid host target \"{}\"", target.hostname))
+        })?;
+
+    for r in rules {
+        t.resp.push(r);
+    }
+
+    Ok(target)
 }

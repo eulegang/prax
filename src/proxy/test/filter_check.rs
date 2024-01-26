@@ -13,7 +13,7 @@ pub async fn run_check(module: &str) {
     let mut config = base.clone();
     config.push("config.lua");
 
-    let config = Config::load(&config, ()).unwrap();
+    let config = Config::load(&config, ()).await.unwrap();
 
     for req in find_requests(&base).await {
         let name = extract_name(&req);

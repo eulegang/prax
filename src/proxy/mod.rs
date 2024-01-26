@@ -4,9 +4,8 @@ use tokio::sync::Mutex;
 
 mod err;
 mod filter;
-mod globals;
+//mod globals;
 mod load;
-mod target_ref;
 
 mod interp;
 
@@ -14,11 +13,12 @@ mod interp;
 mod test;
 
 pub use err::ConfError;
-pub use target_ref::TargetRef;
 
 use crate::Filter;
 
-#[derive(Default, Clone)]
+use self::interp::Interp;
+
+#[derive(Default, Clone, Debug)]
 pub struct Proxy {
     pub targets: Vec<Target>,
     pub focus: bool,
@@ -57,11 +57,10 @@ pub enum Attr {
     Body,
 }
 
-type UProxy = Arc<Mutex<Proxy>>;
-
 #[derive(Default)]
 pub struct Config<F: Filter + Sync> {
-    proxy: UProxy,
+    proxy: Proxy,
+    interp: Interp,
     intercept: F,
 }
 
