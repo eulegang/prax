@@ -1,11 +1,8 @@
-use std::{path::Path, sync::Arc};
-
-use mlua::Lua;
-use tokio::sync::Mutex;
+use std::path::Path;
 
 use crate::Filter;
 
-use super::{interp::Interp, Attr, Config, Proxy, Rule};
+use super::{interp::Interp, Config};
 
 impl<F> Config<F>
 where

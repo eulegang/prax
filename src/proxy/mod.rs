@@ -1,10 +1,7 @@
 use mlua::{FromLua, UserData};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 mod err;
 mod filter;
-//mod globals;
 mod load;
 
 mod interp;

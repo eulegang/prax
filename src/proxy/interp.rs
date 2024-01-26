@@ -10,7 +10,7 @@ use super::{Attr, Func, Proxy, Rule, Subst};
 type Return = Val;
 type Input = Val;
 
-enum Val {
+pub enum Val {
     Nil,
     Bool(bool),
     String(String),
@@ -74,12 +74,14 @@ impl Interp {
                 let r: Val = match func.call(s.input) {
                     Ok(r) => r,
                     Err(e) => {
-                        s.chan.send(Err(e));
+                        if s.chan.send(Err(e)).is_err() {
+                            log::error!("failed value back");
+                        }
                         continue;
                     }
                 };
 
-                if let Err(_) = s.chan.send(Ok(r)) {
+                if s.chan.send(Ok(r)).is_err() {
                     log::error!("error sending value back");
                     continue;
                 }
