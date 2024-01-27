@@ -921,6 +921,7 @@ dependencies = [
  "eyre",
  "flate2",
  "futures 0.3.29",
+ "http",
  "http-body",
  "http-body-util",
  "hyper",

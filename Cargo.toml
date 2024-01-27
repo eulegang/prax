@@ -12,6 +12,7 @@ panic = "abort"
 [dependencies]
 clap = { version = "4.4.8", features = ["derive"] }
 eyre = "0.6.8"
+http = "1.0.0"
 http-body = "1.0.0"
 http-body-util = "0.1.0"
 hyper = { version = "1.0.1", features = ["server", "client", "http1" ] }
