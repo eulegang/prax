@@ -23,6 +23,21 @@ pub enum SubstError {
 }
 
 impl Subst {
+    pub async fn sub_num(&self, interp: &Interp, num: i64) -> Result<i64, SubstError> {
+        match self {
+            Subst::Func(slot) => {
+                let res = interp.invoke(*slot, num.into()).await?;
+
+                match res {
+                    Val::Number(n) => Ok(n),
+                    _ => Err(SubstError::TypeMismatch(res)),
+                }
+            }
+
+            Subst::System(_) => todo!("implement running system command"),
+        }
+    }
+
     pub async fn subst(&self, interp: &Interp, content: String) -> Result<String, SubstError> {
         match self {
             Subst::Func(slot) => {
@@ -30,8 +45,7 @@ impl Subst {
 
                 match res {
                     Val::String(s) => Ok(s),
-                    Val::Nil => Err(SubstError::TypeMismatch(res)),
-                    Val::Bool(_) => Err(SubstError::TypeMismatch(res)),
+                    _ => Err(SubstError::TypeMismatch(res)),
                 }
             }
 

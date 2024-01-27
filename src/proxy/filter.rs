@@ -304,7 +304,91 @@ where
                         *res.body_mut() = value.as_bytes().to_owned();
                     }
                 },
-                Rule::Subst(_, _) => todo!(),
+
+                Rule::Subst(attr, sub) => match attr {
+                    Attr::Method => {}
+                    Attr::Query(_) => {}
+                    Attr::Path => {}
+
+                    Attr::Status => {
+                        let number = res.status().as_u16();
+
+                        let new = match sub.sub_num(&self.interp, number as i64).await {
+                            Ok(s) => s,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        };
+
+                        let new = match u16::try_from(new) {
+                            Ok(n) => n,
+                            Err(e) => {
+                                log::error!("{e}");
+                                continue;
+                            }
+                        };
+
+                        let new = match StatusCode::from_u16(new) {
+                            Ok(n) => n,
+                            Err(e) => {
+                                log::error!("{e}");
+                                continue;
+                            }
+                        };
+
+                        *res.status_mut() = new;
+                    }
+                    Attr::Header(header) => {
+                        for (name, value) in res.headers_mut() {
+                            if name.as_str() == header {
+                                let val = match std::str::from_utf8(value.as_bytes()) {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        log::error!("{}", e);
+                                        continue;
+                                    }
+                                };
+
+                                let new_val = match sub.subst(&self.interp, val.into()).await {
+                                    Ok(res) => res,
+                                    Err(e) => {
+                                        log::error!("{}", e);
+                                        continue;
+                                    }
+                                };
+
+                                *value = match HeaderValue::from_str(&new_val) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        log::error!("{}", e);
+                                        continue;
+                                    }
+                                };
+                            }
+                        }
+                    }
+
+                    Attr::Body => {
+                        let body = match std::str::from_utf8(res.body()) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        };
+
+                        let new = match sub.subst(&self.interp, body.to_string()).await {
+                            Ok(s) => s,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        };
+
+                        *res.body_mut() = new.as_str().as_bytes().to_vec();
+                    }
+                },
             }
         }
 

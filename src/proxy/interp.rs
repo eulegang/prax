@@ -14,6 +14,7 @@ type Input = Val;
 pub enum Val {
     Nil,
     Bool(bool),
+    Number(i64),
     String(String),
 }
 
@@ -248,6 +249,7 @@ impl<'lua> IntoLua<'lua> for Val {
         match self {
             Val::Nil => Ok(mlua::Value::Nil),
             Val::Bool(b) => Ok(mlua::Value::Boolean(b)),
+            Val::Number(n) => Ok(mlua::Value::Integer(n)),
             Val::String(s) => Ok(mlua::Value::String(lua.create_string(s)?)),
         }
     }
@@ -259,6 +261,7 @@ impl<'lua> FromLua<'lua> for Val {
             mlua::Value::Nil => Ok(Val::Nil),
             mlua::Value::Boolean(b) => Ok(Val::Bool(b)),
             mlua::Value::String(s) => Ok(Val::String(s.to_str()?.to_string())),
+            mlua::Value::Integer(n) => Ok(Val::Number(n)),
             _ => Err(mlua::Error::RuntimeError(format!(
                 "Invalid type to be coorced into Val [{}]",
                 value.type_name()
@@ -333,11 +336,18 @@ impl From<String> for Val {
     }
 }
 
+impl From<i64> for Val {
+    fn from(value: i64) -> Self {
+        Val::Number(value)
+    }
+}
+
 impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Val::Nil => write!(f, "nil"),
             Val::Bool(b) => write!(f, "{}", b),
+            Val::Number(n) => write!(f, "{}", n),
             Val::String(s) => write!(f, "\"{}\"", s),
         }
     }
