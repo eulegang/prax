@@ -60,10 +60,10 @@ where
                             if let Some(query) = pq.query() {
                                 PathAndQuery::from_str(&format!("{}?{}", value, query))?
                             } else {
-                                PathAndQuery::from_str(&value)?
+                                PathAndQuery::from_str(value)?
                             }
                         } else {
-                            PathAndQuery::from_str(&value)?
+                            PathAndQuery::from_str(value)?
                         };
 
                         parts.path_and_query = Some(pq);
@@ -100,7 +100,7 @@ where
                         *req.uri_mut() = Uri::from_parts(parts).unwrap();
                     }
                     Attr::Header(key) => {
-                        if let Ok(header) = HeaderValue::from_str(&value) {
+                        if let Ok(header) = HeaderValue::from_str(value) {
                             req.headers_mut()
                                 .insert(HeaderName::from_bytes(key.as_bytes()).unwrap(), header);
                         }
@@ -168,7 +168,7 @@ where
 
                                     let val = v.unwrap_or_default().to_string();
 
-                                    let val = match sub.subst(&self.interp, val.into()).await {
+                                    let val = match sub.subst(&self.interp, val).await {
                                         Ok(res) => res,
                                         Err(e) => {
                                             log::error!("{}", e);
@@ -243,7 +243,7 @@ where
                             }
                         };
 
-                        *req.body_mut() = res.as_str().as_bytes().to_vec();
+                        *req.body_mut() = res.as_bytes().to_vec();
                     }
                 },
             }
@@ -295,7 +295,7 @@ where
                         *res.status_mut() = status;
                     }
                     Attr::Header(key) => {
-                        if let Ok(header) = HeaderValue::from_str(&value) {
+                        if let Ok(header) = HeaderValue::from_str(value) {
                             res.headers_mut()
                                 .insert(HeaderName::from_bytes(key.as_bytes()).unwrap(), header);
                         }
@@ -386,7 +386,7 @@ where
                             }
                         };
 
-                        *res.body_mut() = new.as_str().as_bytes().to_vec();
+                        *res.body_mut() = new.as_bytes().to_vec();
                     }
                 },
             }

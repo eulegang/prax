@@ -161,9 +161,8 @@ impl Interp {
             )));
         }
 
-        Ok(rx
-            .await
-            .map_err(|_| mlua::Error::RuntimeError("failed to receive ".to_string()))??)
+        rx.await
+            .map_err(|_| mlua::Error::RuntimeError("failed to receive ".to_string()))?
     }
 }
 

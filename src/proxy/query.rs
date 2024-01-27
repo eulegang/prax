@@ -51,7 +51,7 @@ impl<'a> Iterator for QueryIter<'a> {
             &rest[0..next]
         } else {
             self.pos = usize::MAX;
-            &rest
+            rest
         };
 
         if let Some((k, v)) = sub.split_once('=') {
