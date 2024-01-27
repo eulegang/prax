@@ -33,6 +33,23 @@ mod request {
             }
         }
     }
+
+    mod subst_func {
+        mod header {
+            use super::super::super::*;
+
+            #[tokio::test]
+            async fn missing() {
+                const IN: &str = "GET /\nhost: example.com:3000\nuser-agent: curl\n";
+                const OUT: &str = "GET /\nhost: example.com:3000\nuser-agent: curl/0.0.0-example\n";
+
+                let from = PathBuf::from("src/proxy/test/subst_func.lua");
+                let config = Config::load(&from, ()).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
+        }
+    }
 }
 
 mod response {
@@ -63,9 +80,4 @@ mod response {
             }
         }
     }
-}
-
-#[tokio::test]
-async fn test_set_subst_func() {
-    filter_check::run_check("subst_func").await;
 }
