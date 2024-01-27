@@ -99,6 +99,62 @@ pub async fn run_check(module: &str) {
     }
 }
 
+pub async fn check_req(config: &Config<()>, input: &str, output: &str) {
+    let input: Vec<String> = input.split('\n').map(ToString::to_string).collect();
+    let output: Vec<String> = output.split('\n').map(ToString::to_string).collect();
+
+    let mut input_req = hyper::Request::new(Vec::new());
+    input_req.imprint(input).unwrap();
+
+    if let Err(e) = config
+        .modify_request("example.com:3000", &mut input_req)
+        .await
+    {
+        panic!("failed to process request {:?} {}", input_req, e);
+    }
+
+    let mut output_req = hyper::Request::new(Vec::new());
+    output_req.imprint(output).unwrap();
+
+    let validations = input_req.validate_with(&output_req);
+
+    if !validations.is_empty() {
+        let mut buf = String::new();
+        for val in validations {
+            buf.push_str(&format!("- {}\n", val));
+        }
+        panic!("{}\n{:#?}\n\n != \n\n{:#?}", buf, input_req, output_req);
+    }
+}
+
+pub async fn check_res(config: &Config<()>, input: &str, output: &str) {
+    let input: Vec<String> = input.split('\n').map(ToString::to_string).collect();
+    let output: Vec<String> = output.split('\n').map(ToString::to_string).collect();
+
+    let mut input_res = hyper::Response::new(Vec::new());
+    input_res.imprint(input).unwrap();
+
+    if let Err(e) = config
+        .modify_response("example.com:3000", &mut input_res)
+        .await
+    {
+        panic!("failed to process request {:?} {}", input_res, e);
+    }
+
+    let mut output_res = hyper::Response::new(Vec::new());
+    output_res.imprint(output).unwrap();
+
+    let validations = input_res.validate_with(&output_res);
+
+    if !validations.is_empty() {
+        let mut buf = String::new();
+        for val in validations {
+            buf.push_str(&format!("- {}\n", val));
+        }
+        panic!("{}\n{:#?}\n\n != \n\n{:#?}", buf, input_res, output_res);
+    }
+}
+
 pub enum ValError<'a> {
     Method {
         actual: &'a Method,
