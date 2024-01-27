@@ -1,9 +1,11 @@
 use mlua::{FromLua, UserData};
 
+mod attr;
 mod err;
 mod filter;
 mod load;
 mod query;
+mod sub;
 
 mod interp;
 
@@ -15,6 +17,8 @@ pub use err::ConfError;
 use crate::Filter;
 
 use self::interp::Interp;
+
+pub use sub::{Func, Subst};
 
 #[derive(Default, Clone, Debug)]
 pub struct Proxy {
@@ -35,14 +39,6 @@ pub enum Rule {
     Dump,
     Set(Attr, String),
     Subst(Attr, Subst),
-}
-
-pub type Func = usize;
-
-#[derive(FromLua, Debug, Clone)]
-pub enum Subst {
-    Func(Func),
-    System(String),
 }
 
 #[derive(FromLua, Debug, Clone)]

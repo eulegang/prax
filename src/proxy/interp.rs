@@ -10,6 +10,7 @@ use super::{Attr, Func, Proxy, Rule, Subst};
 type Return = Val;
 type Input = Val;
 
+#[derive(Debug, Clone)]
 pub enum Val {
     Nil,
     Bool(bool),
@@ -94,11 +95,15 @@ impl Interp {
     }
 
     fn load(path: &Path) -> mlua::Result<Lua> {
-        let Ok(content) = std::fs::read(path) else {
-            return Err(mlua::Error::RuntimeError(format!(
-                "could not read lua file \"{}\"",
-                path.display()
-            )));
+        let content = match std::fs::read(path) {
+            Ok(content) => content,
+            Err(e) => {
+                return Err(mlua::Error::RuntimeError(format!(
+                    "could not read lua file \"{}\" {}",
+                    path.display(),
+                    e
+                )));
+            }
         };
 
         let lua = Lua::new();
@@ -320,4 +325,20 @@ async fn target_ref_resp(
     }
 
     Ok(target)
+}
+
+impl From<String> for Val {
+    fn from(value: String) -> Self {
+        Val::String(value)
+    }
+}
+
+impl std::fmt::Display for Val {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Val::Nil => write!(f, "nil"),
+            Val::Bool(b) => write!(f, "{}", b),
+            Val::String(s) => write!(f, "\"{}\"", s),
+        }
+    }
 }

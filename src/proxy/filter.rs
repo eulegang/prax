@@ -4,7 +4,7 @@ use hyper::{
     Method, StatusCode, Uri,
 };
 
-use crate::{Filter, Result};
+use crate::{proxy::query::Query, Filter, Result};
 
 use super::{Attr, Config, Rule};
 
@@ -109,7 +109,143 @@ where
                         *req.body_mut() = value.as_bytes().to_owned();
                     }
                 },
-                Rule::Subst(_, _) => todo!(),
+
+                Rule::Subst(attr, sub) => match attr {
+                    Attr::Method => {
+                        let method = req.method().as_str().to_string();
+                        let res = match sub.subst(&self.interp, method).await {
+                            Ok(res) => res,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        };
+
+                        *req.method_mut() = match Method::from_str(&res) {
+                            Ok(method) => method,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        }
+                    }
+                    Attr::Status => {}
+                    Attr::Path => {
+                        let path = req.uri().path().to_string();
+
+                        let value = match sub.subst(&self.interp, path).await {
+                            Ok(res) => res,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        };
+
+                        let mut parts = req.uri().clone().into_parts();
+                        let pq = if let Some(pq) = parts.path_and_query {
+                            if let Some(query) = pq.query() {
+                                PathAndQuery::from_str(&format!("{}?{}", value, query))?
+                            } else {
+                                PathAndQuery::from_str(&value)?
+                            }
+                        } else {
+                            PathAndQuery::from_str(&value)?
+                        };
+
+                        parts.path_and_query = Some(pq);
+
+                        *req.uri_mut() = Uri::from_parts(parts).unwrap();
+                    }
+                    Attr::Query(q) => {
+                        if let Some(query) = req.uri().query() {
+                            let query = Query::from(query);
+                            let mut res = Query::default();
+                            let mut set = false;
+
+                            for (k, v) in query.iter() {
+                                if k == q {
+                                    set = true;
+
+                                    let val = v.unwrap_or_default().to_string();
+
+                                    let val = match sub.subst(&self.interp, val.into()).await {
+                                        Ok(res) => res,
+                                        Err(e) => {
+                                            log::error!("{}", e);
+                                            continue;
+                                        }
+                                    };
+
+                                    res.push(k, Some(&val));
+                                } else {
+                                    res.push(k, v);
+                                }
+                            }
+
+                            if set {
+                                let mut parts = req.uri().clone().into_parts();
+                                parts.path_and_query = match res.to_path_and_query(req.uri().path())
+                                {
+                                    Ok(s) => Some(s),
+                                    Err(e) => {
+                                        log::error!("{e}");
+                                        continue;
+                                    }
+                                };
+
+                                *req.uri_mut() = Uri::from_parts(parts).unwrap();
+                            }
+                        }
+                    }
+                    Attr::Header(header) => {
+                        for (name, value) in req.headers_mut() {
+                            if name.as_str() == header {
+                                let val = match std::str::from_utf8(value.as_bytes()) {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        log::error!("{}", e);
+                                        continue;
+                                    }
+                                };
+
+                                let res = match sub.subst(&self.interp, val.into()).await {
+                                    Ok(res) => res,
+                                    Err(e) => {
+                                        log::error!("{}", e);
+                                        continue;
+                                    }
+                                };
+
+                                *value = match HeaderValue::from_str(&res) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        log::error!("{}", e);
+                                        continue;
+                                    }
+                                };
+                            }
+                        }
+                    }
+                    Attr::Body => {
+                        let body = match std::str::from_utf8(req.body()) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        };
+
+                        let res = match sub.subst(&self.interp, body.to_string()).await {
+                            Ok(s) => s,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                continue;
+                            }
+                        };
+
+                        *req.body_mut() = res.as_str().as_bytes().to_vec();
+                    }
+                },
             }
         }
 

@@ -14,8 +14,10 @@ pub async fn run_check(module: &str) {
     config.push("config.lua");
 
     let config = Config::load(&config, ()).await.unwrap();
+    let mut tested = false;
 
     for req in find_requests(&base).await {
+        tested = true;
         let name = extract_name(&req);
 
         let input = lines(&req).await;
@@ -54,6 +56,7 @@ pub async fn run_check(module: &str) {
     }
 
     for res in find_responses(&base).await {
+        tested = true;
         let name = extract_name(&res);
 
         let input = lines(&res).await;
@@ -89,6 +92,10 @@ pub async fn run_check(module: &str) {
                 buf, input_res, output_res
             );
         }
+    }
+
+    if !tested {
+        panic!("{module} does not have tests");
     }
 }
 
