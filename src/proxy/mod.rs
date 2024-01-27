@@ -3,6 +3,7 @@ use mlua::{FromLua, UserData};
 mod err;
 mod filter;
 mod load;
+mod query;
 
 mod interp;
 
