@@ -180,10 +180,6 @@ fn query(_: &Lua, (key,): (String,)) -> mlua::Result<Attr> {
     Ok(Attr::Query(key))
 }
 
-fn system(_: &Lua, (cmd,): (String,)) -> mlua::Result<Subst> {
-    Ok(Subst::System(cmd))
-}
-
 fn focus(lua: &Lua, (): ()) -> mlua::Result<()> {
     let mut data = app_data_mut(lua)?;
     data.proxy.focus = true;

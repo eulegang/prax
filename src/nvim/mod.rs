@@ -2,17 +2,16 @@ use std::{collections::VecDeque, sync::Arc};
 
 use crate::cli::NvimConnInfo;
 use prax::hist::Hist;
-use prax::{Filter, Req, Res};
 use tokio::sync::{mpsc, Mutex, Notify};
 use tokio_util::sync::CancellationToken;
 
-use prax::lines::{LinesImprint, ToLines};
-
 use self::{
+    filter::Intercept,
     handler::Handler,
     view::{View, ViewOp},
 };
 
+mod filter;
 mod handler;
 mod io;
 mod tasks;
@@ -53,72 +52,8 @@ impl NVim {
             backlog,
         })
     }
-}
 
-impl Filter for NVim {
-    async fn modify_request(&self, _: &str, req: &mut Req<Vec<u8>>) -> prax::Result<()> {
-        let content = req.to_lines()?;
-
-        let notify = {
-            let mut backlog = self.backlog.lock().await;
-
-            if self
-                .action
-                .send(ViewOp::Intercept {
-                    title: "Intercept Request".into(),
-                    content,
-                })
-                .await
-                .is_err()
-            {
-                return Ok(());
-            };
-
-            let notify = Arc::new(Notify::new());
-            backlog.push_back(notify.clone());
-            notify
-        };
-
-        notify.notified().await;
-
-        let view = self.view.lock().await;
-        let content = view.intercept_buffer().await?;
-
-        req.imprint(content)?;
-
-        Ok(())
-    }
-
-    async fn modify_response(&self, _: &str, res: &mut Res<Vec<u8>>) -> prax::Result<()> {
-        let content = res.to_lines()?;
-
-        let notify = {
-            let mut backlog = self.backlog.lock().await;
-
-            if self
-                .action
-                .send(ViewOp::Intercept {
-                    title: "Intercept Response".into(),
-                    content,
-                })
-                .await
-                .is_err()
-            {
-                return Ok(());
-            }
-
-            let notify = Arc::new(Notify::new());
-            backlog.push_back(notify.clone());
-            notify
-        };
-
-        notify.notified().await;
-
-        let view = self.view.lock().await;
-        let content = view.intercept_buffer().await?;
-
-        res.imprint(content)?;
-
-        Ok(())
+    pub fn intercept(self) -> Intercept {
+        self.into()
     }
 }

@@ -1,15 +1,13 @@
-use config::Config;
 use prax::hist::Hist;
 use srv::Tls;
-use std::{fs::File, sync::Arc};
+use std::fs::File;
 use tokio_util::sync::CancellationToken;
 
 use clap::Parser;
 use log::LevelFilter;
-use tokio::sync::Mutex;
+use prax::proxy::Config;
 
 mod cli;
-mod config;
 mod srv;
 
 mod nvim;
@@ -38,22 +36,22 @@ async fn main() -> eyre::Result<()> {
     if let Some(nvim) = cli.nvim {
         log::trace!("loading nvim connection");
         let history: &'static Hist = Box::leak(Box::default());
+        let nvim = nvim::NVim::connect(nvim, token.clone(), history).await?;
+        let intercept = nvim.intercept();
 
-        let nvim = Arc::new(Some(Mutex::new(
-            nvim::NVim::connect(nvim, token.clone(), history).await?,
-        )));
+        if let Some(path) = cli.configure {
+            let config = Config::load(&path, intercept).await?;
 
-        let config = if let Some(path) = cli.configure {
-            Config::load(&path, nvim)?
+            let server = srv::Server::new(cli.listen, token, config, history, tls);
+            server.listen().await?;
         } else {
-            Config::default()
+            let config = Config::<()>::default();
+            let server = srv::Server::new(cli.listen, token, config, history, tls);
+            server.listen().await?;
         };
-
-        let server = srv::Server::new(cli.listen, token, config, history, tls);
-        server.listen().await?;
     } else {
         let config = if let Some(path) = cli.configure {
-            Config::load(&path, Arc::new(None))?
+            Config::load(&path, ()).await?
         } else {
             Config::default()
         };
