@@ -24,3 +24,22 @@ where
         Ok(config)
     }
 }
+
+impl Config<()> {
+    #[cfg(test)]
+    pub async fn test(content: &'static str) -> eyre::Result<Self> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        let interp = Interp::test(content, tx);
+
+        let proxy = rx.await??;
+
+        let config = Config {
+            proxy,
+            intercept: (),
+            interp,
+        };
+
+        Ok(config)
+    }
+}

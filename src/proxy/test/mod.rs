@@ -48,6 +48,18 @@ mod request {
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
+
+            #[tokio::test]
+            async fn sub_method() {
+                const IN: &str = "GET /\nhost: example.com:3000\nuser-agent: curl\n";
+                const OUT: &str = "POST /\nhost: example.com:3000\nuser-agent: curl\n";
+                const CONFIG: &str =
+                    "target(\"example.com:3000\"):req(sub(method, function(s) return \"POST\" end))";
+
+                let config = Config::test(CONFIG).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
         }
     }
 }

@@ -1,4 +1,7 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use mlua::{AppDataRefMut, FromLua, Function, IntoLua, Lua, UserData, Variadic};
 use tokio::sync::mpsc::Sender;
@@ -39,11 +42,11 @@ struct AppData {
 
 impl Interp {
     pub fn new(path: &Path, proxy: tokio::sync::oneshot::Sender<mlua::Result<Proxy>>) -> Self {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<Invocation>(1);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Invocation>(1);
 
         let path = path.to_path_buf();
         std::thread::spawn(move || {
-            let lua = match Self::load(&path) {
+            let lua = match Self::load_path(&path) {
                 Ok(l) => l,
 
                 Err(e) => {
@@ -52,42 +55,7 @@ impl Interp {
                 }
             };
 
-            let mut swap = Proxy::default();
-            let mut funcs: Vec<Function<'static>> = Vec::new();
-            match app_data_mut(&lua) {
-                Ok(mut appdata) => {
-                    std::mem::swap(&mut swap, &mut appdata.proxy);
-                    std::mem::swap(&mut funcs, &mut appdata.funcs);
-
-                    let _ = proxy.send(Ok(swap));
-                }
-                Err(e) => {
-                    let _ = proxy.send(Err(e));
-                    return;
-                }
-            }
-
-            while let Some(s) = rx.blocking_recv() {
-                let Some(func) = funcs.get(s.selector) else {
-                    log::error!("invalid func dereferenced");
-                    continue;
-                };
-
-                let r: Val = match func.call(s.input) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        if s.chan.send(Err(e)).is_err() {
-                            log::error!("failed value back");
-                        }
-                        continue;
-                    }
-                };
-
-                if s.chan.send(Ok(r)).is_err() {
-                    log::error!("error sending value back");
-                    continue;
-                }
-            }
+            Self::runloop(lua, rx, proxy);
         });
 
         let sender = Some(tx);
@@ -95,18 +63,75 @@ impl Interp {
         Interp { sender }
     }
 
-    fn load(path: &Path) -> mlua::Result<Lua> {
-        let content = match std::fs::read(path) {
-            Ok(content) => content,
-            Err(e) => {
-                return Err(mlua::Error::RuntimeError(format!(
-                    "could not read lua file \"{}\" {}",
-                    path.display(),
-                    e
-                )));
-            }
-        };
+    #[cfg(test)]
+    pub fn test(
+        content: &'static str,
+        proxy: tokio::sync::oneshot::Sender<mlua::Result<Proxy>>,
+    ) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Invocation>(1);
 
+        std::thread::spawn(move || {
+            let lua = match Self::load_literal(content.as_bytes().to_vec(), None) {
+                Ok(l) => l,
+
+                Err(e) => {
+                    let _ = proxy.send(Err(e));
+                    return;
+                }
+            };
+
+            Self::runloop(lua, rx, proxy);
+        });
+
+        let sender = Some(tx);
+
+        Interp { sender }
+    }
+
+    fn runloop(
+        lua: Lua,
+        mut rx: tokio::sync::mpsc::Receiver<Invocation>,
+        proxy: tokio::sync::oneshot::Sender<mlua::Result<Proxy>>,
+    ) {
+        let mut swap = Proxy::default();
+        let mut funcs: Vec<Function<'static>> = Vec::new();
+        match app_data_mut(&lua) {
+            Ok(mut appdata) => {
+                std::mem::swap(&mut swap, &mut appdata.proxy);
+                std::mem::swap(&mut funcs, &mut appdata.funcs);
+
+                let _ = proxy.send(Ok(swap));
+            }
+            Err(e) => {
+                let _ = proxy.send(Err(e));
+                return;
+            }
+        }
+
+        while let Some(s) = rx.blocking_recv() {
+            let Some(func) = funcs.get(s.selector) else {
+                log::error!("invalid func dereferenced");
+                continue;
+            };
+
+            let r: Val = match func.call(s.input) {
+                Ok(r) => r,
+                Err(e) => {
+                    if s.chan.send(Err(e)).is_err() {
+                        log::error!("failed value back");
+                    }
+                    continue;
+                }
+            };
+
+            if s.chan.send(Ok(r)).is_err() {
+                log::error!("error sending value back");
+                continue;
+            }
+        }
+    }
+
+    fn load_literal(content: Vec<u8>, path: Option<&Path>) -> mlua::Result<Lua> {
         let lua = Lua::new();
         let appdata = AppData::default();
 
@@ -132,11 +157,30 @@ impl Interp {
             globals.set("body", lua.create_userdata(Attr::Body)?)?;
         }
 
-        let chunk = lua.load(content).set_name("prax-config");
+        let chunk = lua.load(content).set_name(if let Some(path) = path {
+            path.display().to_string()
+        } else {
+            "prax-config".to_string()
+        });
 
         chunk.exec()?;
 
         Ok(lua)
+    }
+
+    fn load_path(path: &Path) -> mlua::Result<Lua> {
+        let content = match std::fs::read(path) {
+            Ok(content) => content,
+            Err(e) => {
+                return Err(mlua::Error::RuntimeError(format!(
+                    "could not read lua file \"{}\" {}",
+                    path.display(),
+                    e
+                )));
+            }
+        };
+
+        Self::load_literal(content, Some(path))
     }
 
     pub async fn invoke(&self, func: Func, arg: Val) -> mlua::Result<Val> {
