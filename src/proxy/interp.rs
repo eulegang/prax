@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 use mlua::{AppDataRefMut, FromLua, Function, IntoLua, Lua, UserData, Variadic};
 use tokio::sync::mpsc::Sender;
