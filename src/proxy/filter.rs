@@ -16,11 +16,7 @@ where
 {
     async fn modify_request(&self, hostname: &str, req: &mut crate::Req<Vec<u8>>) -> Result<()> {
         log::debug!("applying config request rules to {hostname}");
-        let Some(target) = dbg!(&self.proxy)
-            .targets
-            .iter()
-            .find(|t| t.hostname == hostname)
-        else {
+        let Some(target) = &self.proxy.targets.iter().find(|t| t.hostname == hostname) else {
             return Ok(());
         };
 

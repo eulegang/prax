@@ -60,6 +60,18 @@ mod request {
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
+
+            #[tokio::test]
+            async fn sub_systemccmd_method() {
+                const IN: &str = "GET /\nhost: example.com:3000\nuser-agent: curl\n";
+                const OUT: &str = "GET /\nhost: example.com:3000\nuser-agent: hurl\n";
+                const CONFIG: &str =
+                    "target(\"example.com:3000\"):req(sub(header(\"user-agent\"), \"tr c h\"))";
+
+                let config = Config::test(CONFIG).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
         }
     }
 }

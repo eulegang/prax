@@ -261,6 +261,8 @@ fn sub<'a>(lua: &'a Lua, (attr, value): (Attr, mlua::Value<'a>)) -> mlua::Result
 
             Ok(Rule::Subst(attr, Subst::Func(index)))
         }
+
+        mlua::Value::String(s) => Ok(Rule::Subst(attr, Subst::System(s.to_str()?.to_string()))),
         mlua::Value::UserData(data) => {
             if data.is::<Subst>() {
                 Ok(Rule::Subst(attr, data.user_value()?))
