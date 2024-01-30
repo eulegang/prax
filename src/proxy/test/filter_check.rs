@@ -129,14 +129,14 @@ impl Validate for hyper::Request<Vec<u8>> {
         if self.method() != expectation.method() {
             vals.push(ValError::Method {
                 actual: self.method(),
-                expected: self.method(),
+                expected: expectation.method(),
             });
         }
 
         if self.uri() != expectation.uri() {
             vals.push(ValError::Uri {
                 actual: self.uri(),
-                expected: self.uri(),
+                expected: expectation.uri(),
             })
         }
 
