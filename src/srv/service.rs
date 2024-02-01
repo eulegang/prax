@@ -145,6 +145,8 @@ where
         }
 
         Box::pin(async move {
+            let filter = filter.read().await.clone();
+
             let mut req = collect_req(req).await?;
 
             filter.modify_request(&lookup, &mut req).await?;
@@ -276,6 +278,8 @@ where
 
         let sender = self.sender.clone();
         Box::pin(async move {
+            let filter = filter.read().await.clone();
+
             let mut req = collect_req(req).await?;
 
             filter.modify_request(&lookup, &mut req).await?;

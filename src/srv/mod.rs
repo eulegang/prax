@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use http_body_util::Full;
 use hyper::{body::Bytes, client::conn::http1::SendRequest};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 mod listen;
@@ -14,7 +14,7 @@ pub use self::tls::Tls;
 pub struct Server<F, S: 'static> {
     addr: SocketAddr,
     token: CancellationToken,
-    filter: Arc<F>,
+    filter: Arc<RwLock<Arc<F>>>,
     scribe: &'static S,
     tls: Option<Tls>,
 }
@@ -45,7 +45,7 @@ impl<F, S> Server<F, S> {
         scribe: &'static S,
         tls: Option<Tls>,
     ) -> Self {
-        let filter = Arc::new(filter);
+        let filter = Arc::new(RwLock::new(Arc::new(filter)));
 
         Server {
             addr,
@@ -54,5 +54,11 @@ impl<F, S> Server<F, S> {
             scribe,
             tls,
         }
+    }
+
+    pub async fn replace(&self, filter: F) {
+        let mut f = self.filter.write().await;
+
+        *f = Arc::new(filter);
     }
 }
