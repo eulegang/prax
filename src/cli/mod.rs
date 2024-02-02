@@ -11,6 +11,10 @@ pub struct Cli {
     #[clap(short = 'f', long = "file")]
     pub configure: Option<PathBuf>,
 
+    /// watch configure script
+    #[clap(short, long, requires = "configure")]
+    pub watch: bool,
+
     /// log file
     #[clap(short = 'L', long)]
     pub log: Option<PathBuf>,

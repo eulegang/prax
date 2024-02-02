@@ -10,7 +10,7 @@ where
     F: Filter + Sync + Send + 'static,
     S: Scribe + Sync + Send + 'static,
 {
-    pub async fn listen(self) -> Result<(), io::Error> {
+    pub async fn listen(&self) -> Result<(), io::Error> {
         let socket = TcpSocket::new_v4()?;
         socket.bind(self.addr)?;
         socket.set_reuseaddr(true)?;

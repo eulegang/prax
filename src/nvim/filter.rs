@@ -9,6 +9,7 @@ use tokio::sync::{Mutex, Notify};
 
 use prax::lines::{LinesImprint, ToLines};
 
+#[derive(Clone)]
 pub struct Intercept(Arc<Mutex<NVim>>);
 
 impl From<NVim> for Intercept {

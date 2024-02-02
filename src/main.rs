@@ -1,6 +1,6 @@
 use prax::hist::Hist;
 use srv::Tls;
-use std::fs::File;
+use std::{fs::File, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
 use clap::Parser;
@@ -41,8 +41,24 @@ async fn main() -> eyre::Result<()> {
 
         if let Some(path) = cli.configure {
             let config = Config::load(&path, intercept).await?;
+            let reload = if cli.watch {
+                Some(config.watch(path))
+            } else {
+                None
+            };
 
             let server = srv::Server::new(cli.listen, token, config, history, tls);
+            let server = Arc::new(server);
+
+            let s = server.clone();
+            if let Some(mut reload) = reload {
+                tokio::spawn(async move {
+                    while let Some(filter) = reload.recv().await {
+                        s.replace(filter).await;
+                    }
+                });
+            }
+
             server.listen().await?;
         } else {
             let config = Config::<()>::default();
