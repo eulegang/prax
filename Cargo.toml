@@ -42,5 +42,4 @@ tokio-rustls = "0.25.0"
 webpki-roots = "0.26.0"
 rustls-pemfile = "2.0.0"
 flate2 = "1.0.28"
-
-notify = { version = "6.1.1", default-features = false, features = [ "macos_kqueue" ] }
+tokinotify = "0.1.0"
