@@ -33,15 +33,22 @@ where
 
         let watch = path.clone();
         tokio::spawn(async move {
-            let mut notify = INotify::new().unwrap();
+            let interest = Mask::CREATE | Mask::MODIFY | Mask::CLOSE_WRITE | Mask::DELETE_SELF;
+
+            let mut notify = match INotify::new() {
+                Ok(i) => i,
+                Err(e) => {
+                    log::error!("failed to start inotify: {e}");
+                    return;
+                }
+            };
+
             let i = intercept.clone();
 
-            notify
-                .add(
-                    &watch,
-                    Mask::CREATE | Mask::MODIFY | Mask::CLOSE_WRITE | Mask::DELETE_SELF,
-                )
-                .unwrap();
+            if let Err(e) = notify.add(&watch, interest) {
+                log::error!("failed to start watch: {e}");
+                return;
+            }
 
             loop {
                 let event = match notify.watch().await {
@@ -55,18 +62,17 @@ where
                 log::debug!("event = {event:?}");
 
                 if event.mask.contains(Mask::IGNORED) {
-                    notify
-                        .add(
-                            &watch,
-                            Mask::CREATE | Mask::MODIFY | Mask::CLOSE_WRITE | Mask::DELETE_SELF,
-                        )
-                        .unwrap();
+                    if let Err(e) = notify.add(&watch, interest) {
+                        log::error!("failed to readd watch: {e}");
+                    }
                     continue;
                 }
 
                 match Config::load(&path, i.clone()).await {
                     Ok(config) => {
-                        let _ = tx.send(config).await;
+                        if tx.send(config).await.is_err() {
+                            log::error!("failed to send config");
+                        }
                     }
                     Err(err) => {
                         log::error!("failed to load config {err}");
