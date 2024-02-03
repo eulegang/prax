@@ -40,6 +40,8 @@ async fn main() -> eyre::Result<()> {
         let intercept = nvim.intercept();
 
         if let Some(path) = cli.configure {
+            log::debug!("path is correct");
+
             let config = Config::load(&path, intercept).await?;
             let reload = if cli.watch {
                 Some(config.watch(path))
@@ -52,8 +54,10 @@ async fn main() -> eyre::Result<()> {
 
             let s = server.clone();
             if let Some(mut reload) = reload {
+                log::debug!("watching for reloads");
                 tokio::spawn(async move {
                     while let Some(filter) = reload.recv().await {
+                        log::debug!("found reload");
                         s.replace(filter).await;
                     }
                 });

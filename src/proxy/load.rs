@@ -1,8 +1,15 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    thread::sleep,
+    time::Duration,
+};
 
-use notify::{RecursiveMode, Watcher};
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 
-use crate::Filter;
+use crate::{
+    notify::linux::{INotify, Mask},
+    Filter,
+};
 
 use super::{interp::Interp, Config};
 
@@ -31,28 +38,89 @@ where
 
         let intercept = self.intercept.clone();
 
-        std::thread::spawn(move || {
-            let original_path = path.clone();
-            let mut watcher = match notify::recommended_watcher(move |res| {
-                if let Err(e) = res {
-                    log::error!("{e}");
-                    return;
+        let watch = path.clone();
+        tokio::spawn(async move {
+            let mut notify = INotify::new().unwrap();
+            let i = intercept.clone();
+
+            notify
+                .add(
+                    &watch,
+                    Mask::IN_CREATE | Mask::IN_MODIFY | Mask::IN_CLOSE_WRITE | Mask::IN_DELETE_SELF,
+                )
+                .unwrap();
+
+            loop {
+                let event = match notify.watch().await {
+                    Ok(e) => e,
+                    Err(e) => {
+                        log::error!("notify error: {e}");
+                        continue;
+                    }
                 };
 
-                let i = intercept.clone();
-                let t = tx.clone();
-                let p = path.clone();
+                log::debug!("event = {event:?}");
 
-                tokio::spawn(async move {
-                    match Config::load(p.as_ref(), i.clone()).await {
-                        Ok(config) => {
-                            let _ = t.send(config).await;
-                        }
-                        Err(err) => {
-                            log::error!("failed to load config {err}");
-                        }
+                if event.mask.contains(Mask::IN_IGNORED) {
+                    notify
+                        .add(
+                            &watch,
+                            Mask::IN_CREATE
+                                | Mask::IN_MODIFY
+                                | Mask::IN_CLOSE_WRITE
+                                | Mask::IN_DELETE_SELF,
+                        )
+                        .unwrap();
+                    continue;
+                }
+
+                match Config::load(&path, i.clone()).await {
+                    Ok(config) => {
+                        let _ = tx.send(config).await;
                     }
-                });
+                    Err(err) => {
+                        log::error!("failed to load config {err}");
+                    }
+                }
+            }
+        });
+
+        /*
+        tokio::spawn(async move {
+            let i = intercept.clone();
+            while let Some(path) = path_rx.recv().await {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                log::info!("found path loading config");
+                match Config::load(&path, i.clone()).await {
+                    Ok(config) => {
+                        let _ = tx.send(config).await;
+                    }
+                    Err(err) => {
+                        log::error!("failed to load config {err}");
+                    }
+                }
+            }
+        });
+
+        std::thread::spawn(move || {
+            log::debug!("spawning watcher thread");
+            let original_path = path.clone();
+            let mut watcher = match notify::recommended_watcher(move |res| {
+                log::debug!("watcher invoked");
+                let event: Event = match res {
+                    Ok(e) => e,
+                    Err(e) => {
+                        log::error!("{e}");
+                        return;
+                    }
+                };
+
+                log::debug!("kind: {:?}", event.kind);
+                if !matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
+                    return;
+                }
+
+                let _ = path_tx.blocking_send(path.to_owned());
             }) {
                 Ok(w) => w,
                 Err(e) => {
@@ -64,7 +132,15 @@ where
             if let Err(e) = watcher.watch(&original_path, RecursiveMode::NonRecursive) {
                 log::error!("failed to watch {} {e}", original_path.display());
             };
+
+            loop {
+                sleep(Duration::from_secs(1));
+            }
+
+            log::debug!("ended watcher thread");
+            drop(watcher);
         });
+        */
 
         rx
     }
