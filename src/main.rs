@@ -43,6 +43,11 @@ async fn main() -> eyre::Result<()> {
             log::debug!("path is correct");
 
             let config = Config::load(&path, intercept).await?;
+
+            #[cfg(not(target_os = "linux"))]
+            let reload = None;
+
+            #[cfg(target_os = "linux")]
             let reload = if cli.watch {
                 Some(config.watch(path))
             } else {

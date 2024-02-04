@@ -13,6 +13,7 @@ pub struct Cli {
 
     /// watch configure script
     #[clap(short, long, requires = "configure")]
+    #[cfg(target_os = "linux")]
     pub watch: bool,
 
     /// log file
