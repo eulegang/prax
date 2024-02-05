@@ -6,7 +6,6 @@ use tokio::sync::{mpsc, Mutex, Notify};
 use tokio_util::sync::CancellationToken;
 
 use self::{
-    filter::Intercept,
     handler::Handler,
     view::{View, ViewOp},
 };
@@ -16,6 +15,8 @@ mod handler;
 mod io;
 mod tasks;
 mod view;
+
+pub use filter::Intercept;
 
 pub(crate) type Neovim = nvim_rs::Neovim<io::IoConn>;
 pub(crate) type Buffer = nvim_rs::Buffer<io::IoConn>;

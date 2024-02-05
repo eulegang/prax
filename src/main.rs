@@ -45,7 +45,7 @@ async fn main() -> eyre::Result<()> {
             let config = Config::load(&path, intercept).await?;
 
             #[cfg(not(target_os = "linux"))]
-            let reload = None;
+            let reload = None::<tokio::sync::mpsc::Receiver<Config<nvim::Intercept>>>;
 
             #[cfg(target_os = "linux")]
             let reload = if cli.watch {
