@@ -3,6 +3,10 @@ name = "prax"
 version = "0.1.0"
 edition = "2021"
 
+description = "a web penetration proxy hosted in neovim"
+license = "MIT"
+repository = "https://github.com/eulegang/prax"
+
 [profile.dev]
 panic = "abort"
 
