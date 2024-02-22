@@ -101,3 +101,27 @@ fn test_binary_body() {
         ]
     );
 }
+
+#[tokio::test]
+async fn test_arbitrary_access() {
+    let hist = Hist::default();
+
+    let req = hyper::Request::new(b"ping".to_vec());
+    let res = hyper::Response::new(b"pong".to_vec());
+
+    let mut listener = hist.listen();
+
+    assert!(listener.try_recv().is_err());
+    let id = hist.report_request(&req).await;
+    assert_eq!(listener.try_recv(), Ok(HistoryEvent::Request { index: 0 }));
+
+    assert!(listener.try_recv().is_err());
+    hist.report_response(id, &res).await;
+    assert_eq!(listener.try_recv(), Ok(HistoryEvent::Response { index: 0 }));
+
+    assert!(hist.request(0).is_some());
+    assert!(hist.response(0).is_some());
+
+    assert!(hist.request(1).is_none());
+    assert!(hist.response(1).is_none());
+}
