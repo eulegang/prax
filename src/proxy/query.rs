@@ -9,7 +9,7 @@ pub struct Query {
 
 impl Query {
     pub fn push(&mut self, key: &str, value: Option<&str>) {
-        if self.buf.is_empty() {
+        if !self.buf.is_empty() {
             self.buf.push('&')
         }
 

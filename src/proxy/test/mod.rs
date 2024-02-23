@@ -31,6 +31,28 @@ mod request {
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
+
+            #[tokio::test]
+            async fn set_query_without_other() {
+                const IN: &str = "GET /\nhost: example.com:3000\n";
+                const OUT: &str = "GET /?q=hello-google\nhost: example.com:3000\n";
+
+                let from = PathBuf::from("src/proxy/test/query.lua");
+                let config = Config::load(&from, ()).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
+
+            #[tokio::test]
+            async fn set_query_with_other() {
+                const IN: &str = "GET /?subject=hello\nhost: example.com:3000\n";
+                const OUT: &str = "GET /?subject=hello&q=hello-google\nhost: example.com:3000\n";
+
+                let from = PathBuf::from("src/proxy/test/query.lua");
+                let config = Config::load(&from, ()).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
         }
     }
 

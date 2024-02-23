@@ -75,18 +75,10 @@ where
 
                         let mut parts = req.uri().clone().into_parts();
                         let pq = if let Some(pq) = parts.path_and_query {
-                            if let Some(query) = pq.query() {
-                                if query.is_empty() {
-                                    PathAndQuery::from_str(&format!("{}?{}{}", value, key, value))?
-                                } else {
-                                    PathAndQuery::from_str(&format!(
-                                        "{}?{}&{}{}",
-                                        value, query, key, val
-                                    ))?
-                                }
-                            } else {
-                                PathAndQuery::from_str(&format!("{}?{}{}", pq.path(), key, val))?
-                            }
+                            let mut query = pq.query().map(Query::from).unwrap_or_default();
+                            query.push(key, Some(value));
+
+                            query.to_path_and_query(pq.path())?
                         } else {
                             PathAndQuery::from_str(&format!("/?{key}{val}"))?
                         };
