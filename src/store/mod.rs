@@ -333,7 +333,6 @@ fn test_insert() {
     store.insert(2, 5);
     store.insert(3, 6);
 
-    dbg!(&store);
 
     assert_eq!(store.get(1), Some(&4));
     assert_eq!(store.get(2), Some(&5));
@@ -348,7 +347,6 @@ fn test_multi_block_insert() {
         store.insert(i, i);
     }
 
-    dbg!(&store);
 
     assert_eq!(store.get(34), Some(&34));
 }
