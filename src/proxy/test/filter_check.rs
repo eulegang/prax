@@ -4,7 +4,10 @@ use hyper::{Method, Uri};
 
 use crate::{lines::LinesImprint, proxy::Config, Filter};
 
-pub async fn check_req(config: &Config<()>, input: &str, output: &str) {
+pub async fn check_req<F>(config: &Config<F>, input: &str, output: &str)
+where
+    F: Clone + Filter + Send + Sync + 'static,
+{
     let input: Vec<String> = input.split('\n').map(ToString::to_string).collect();
     let output: Vec<String> = output.split('\n').map(ToString::to_string).collect();
 
@@ -32,7 +35,10 @@ pub async fn check_req(config: &Config<()>, input: &str, output: &str) {
     }
 }
 
-pub async fn check_res(config: &Config<()>, input: &str, output: &str) {
+pub async fn check_res<F>(config: &Config<F>, input: &str, output: &str)
+where
+    F: Clone + Filter + Send + Sync + 'static,
+{
     let input: Vec<String> = input.split('\n').map(ToString::to_string).collect();
     let output: Vec<String> = output.split('\n').map(ToString::to_string).collect();
 
