@@ -3,7 +3,6 @@ use crate::{
     proxy::{test::filter_check::Validate, Config},
     Filter,
 };
-use std::path::PathBuf;
 use trace::Trace;
 
 mod filter_check;
@@ -11,8 +10,60 @@ mod trace;
 
 mod request {
     mod set {
+        mod method {
+            use super::super::super::*;
+
+            #[tokio::test]
+            async fn test() {
+                const IN: &str = "GET /\nhost: example.com:3000\n";
+                const OUT: &str = "POST /\nhost: example.com:3000\n";
+                const CONFIG: &str = r#"target("example.com:3000"):req(set(method, "POST"))"#;
+
+                let config = Config::test(CONFIG, ()).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
+        }
+
+        mod path {
+            use super::super::super::*;
+            #[tokio::test]
+            async fn bare() {
+                const IN: &str = "GET /\nhost: example.com:3000\n";
+                const OUT: &str = "GET /foobar\nhost: example.com:3000\n";
+                const CONFIG: &str = r#"target("example.com:3000"):req(set(path, "/foobar"))"#;
+
+                let config = Config::test(CONFIG, ()).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
+
+            #[tokio::test]
+            async fn with_query() {
+                const IN: &str = "GET /?q=hello\nhost: example.com:3000\n";
+                const OUT: &str = "GET /foobar?q=hello\nhost: example.com:3000\n";
+                const CONFIG: &str = r#"target("example.com:3000"):req(set(path, "/foobar"))"#;
+
+                let config = Config::test(CONFIG, ()).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
+
+            #[tokio::test]
+            async fn blank() {
+                const IN: &str = "GET \nhost: example.com:3000\n";
+                const OUT: &str = "GET /foobar\nhost: example.com:3000\n";
+                const CONFIG: &str = r#"target("example.com:3000"):req(set(path, "/foobar"))"#;
+
+                let config = Config::test(CONFIG, ()).await.unwrap();
+
+                filter_check::check_req(&config, IN, OUT).await;
+            }
+        }
+
         mod header {
             use super::super::super::*;
+            const CONFIG: &str = r#"target("example.com:3000"):req(set(header("Authentication"), "Bearer foobarxyz"))"#;
 
             #[tokio::test]
             async fn missing() {
@@ -20,8 +71,7 @@ mod request {
                 const OUT: &str =
                     "GET /\nhost: example.com:3000\nauthentication: Bearer foobarxyz\n";
 
-                let from = PathBuf::from("src/proxy/test/headers.lua");
-                let config = Config::load(&from, ()).await.unwrap();
+                let config = Config::test(CONFIG, ()).await.unwrap();
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
@@ -32,30 +82,34 @@ mod request {
                 const OUT: &str =
                     "GET /\nhost: example.com:3000\nauthentication: Bearer foobarxyz\n";
 
-                let from = PathBuf::from("src/proxy/test/headers.lua");
-                let config = Config::load(&from, ()).await.unwrap();
+                let config = Config::test(CONFIG, ()).await.unwrap();
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
+        }
+
+        mod query {
+            use super::super::super::*;
+
+            const CONFIG: &str =
+                r#"target("example.com:3000"):req(set(query("q"), "hello-google"))"#;
 
             #[tokio::test]
-            async fn set_query_without_other() {
+            async fn set_without_other() {
                 const IN: &str = "GET /\nhost: example.com:3000\n";
                 const OUT: &str = "GET /?q=hello-google\nhost: example.com:3000\n";
 
-                let from = PathBuf::from("src/proxy/test/query.lua");
-                let config = Config::load(&from, ()).await.unwrap();
+                let config = Config::test(CONFIG, ()).await.unwrap();
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
 
             #[tokio::test]
-            async fn set_query_with_other() {
+            async fn set_with_other() {
                 const IN: &str = "GET /?subject=hello\nhost: example.com:3000\n";
                 const OUT: &str = "GET /?subject=hello&q=hello-google\nhost: example.com:3000\n";
 
-                let from = PathBuf::from("src/proxy/test/query.lua");
-                let config = Config::load(&from, ()).await.unwrap();
+                let config = Config::test(CONFIG, ()).await.unwrap();
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
@@ -70,9 +124,17 @@ mod request {
             async fn missing() {
                 const IN: &str = "GET /\nhost: example.com:3000\nuser-agent: curl\n";
                 const OUT: &str = "GET /\nhost: example.com:3000\nuser-agent: curl/0.0.0-example\n";
+                const CONFIG: &str = r#"
+local function add_version(name)
+    return name .. '/0.0.0-example'
+end
 
-                let from = PathBuf::from("src/proxy/test/subst_func.lua");
-                let config = Config::load(&from, ()).await.unwrap();
+target("example.com:3000")
+    :req(sub(header("user-agent"), add_version))
+    :resp(sub(header("server"), add_version))
+"#;
+
+                let config = Config::test(CONFIG, ()).await.unwrap();
 
                 filter_check::check_req(&config, IN, OUT).await;
             }
@@ -108,14 +170,15 @@ mod response {
     mod set {
         mod header {
             use super::super::super::*;
+            const CONFIG: &str =
+                r#"target("example.com:3000"):resp(set(header("server"), "foobar"))"#;
 
             #[tokio::test]
             async fn missing() {
                 const IN: &str = "200\nhost: example.com:3000\n";
                 const OUT: &str = "200\nhost: example.com:3000\nserver: foobar\n";
 
-                let from = PathBuf::from("src/proxy/test/headers.lua");
-                let config = Config::load(&from, ()).await.unwrap();
+                let config = Config::test(CONFIG, ()).await.unwrap();
 
                 filter_check::check_res(&config, IN, OUT).await;
             }
@@ -125,8 +188,7 @@ mod response {
                 const IN: &str = "200\nhost: example.com:3000\nserver: nginx\n";
                 const OUT: &str = "200\nhost: example.com:3000\nserver: foobar\n";
 
-                let from = PathBuf::from("src/proxy/test/headers.lua");
-                let config = Config::load(&from, ()).await.unwrap();
+                let config = Config::test(CONFIG, ()).await.unwrap();
 
                 filter_check::check_res(&config, IN, OUT).await;
             }
@@ -179,9 +241,8 @@ mod intercept {
             const IN: &str = "GET /?subject=hello\nhost: example.com:3000\n";
             const OUT: &str = "GET /?subject=hello\nhost: example.com:3000\n";
 
-            let from = PathBuf::from("src/proxy/test/intercept.lua");
             let trace = Trace::default();
-            let config = Config::load(&from, trace).await.unwrap();
+            let config = Config::test(CONFIG, trace).await.unwrap();
 
             filter_check::check_req(&config, IN, OUT).await;
 
@@ -211,9 +272,12 @@ mod intercept {
 async fn no_hostname() {
     const IN: &str = "GET /\n";
     const OUT: &str = "GET /\n";
+    const CONFIG: &str = r#"
+target("example.com:3000")
+    :req(set(header("Authentication"), "Bearer foobarxyz"))
+    :resp(set(header("server"), "foobar"))"#;
 
-    let from = PathBuf::from("src/proxy/test/headers.lua");
-    let config = Config::load(&from, ()).await.unwrap();
+    let config = Config::test(CONFIG, ()).await.unwrap();
     let input: Vec<String> = IN.split('\n').map(ToString::to_string).collect();
     let output: Vec<String> = OUT.split('\n').map(ToString::to_string).collect();
 
