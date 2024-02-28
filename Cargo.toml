@@ -47,3 +47,6 @@ webpki-roots = "0.26"
 rustls-pemfile = "2.0.0"
 flate2 = "1.0.28"
 tokinotify = "0.1.0"
+
+[dev-dependencies]
+cucumber = "0.20.2"
