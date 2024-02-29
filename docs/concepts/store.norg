@@ -1,8 +1,0 @@
-
-* History storage
-** Goals 
-   - Append only
-   - Fast
-   - Lock only when modifing 
-
-
