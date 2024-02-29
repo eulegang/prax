@@ -9,5 +9,5 @@ Feature: Requests
         And a header Authentication: Bearer token
         When filtered target("example.com:3000"):req(set(header("Authentication"), "Bearer foobarxyz"))
         Then method is GET
-        And a header Authentication: Bearer foobarxyz
+        And header Authentication is Bearer foobarxyz
 
