@@ -50,7 +50,7 @@ fn given_status(world: &mut HttpWorld, status: u16) {
     world.subject = Subject::Response(res);
 }
 
-#[given(expr = "a header {}: {}")]
+#[given(expr = "a header {} is {}")]
 fn given_header(world: &mut HttpWorld, name: String, value: String) {
     let name = HeaderName::try_from(name).unwrap();
     let value = HeaderValue::try_from(value).unwrap();
@@ -66,7 +66,7 @@ fn given_header(world: &mut HttpWorld, name: String, value: String) {
     }
 }
 
-#[given(expr = "a query {}={}")]
+#[given(expr = "a query {} is {}")]
 fn given_query(world: &mut HttpWorld, name: String, value: String) {
     match &mut world.subject {
         Subject::Init => panic!("uninited"),
