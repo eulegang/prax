@@ -31,9 +31,9 @@ impl View {
     ) -> eyre::Result<(Arc<Mutex<Self>>, mpsc::Sender<ViewOp>)> {
         let list = neovim.create_buf(true, true).await?;
         let intercept = neovim.create_buf(false, true).await?;
-        list.set_name("atkpx").await?;
+        list.set_name("prax-history").await?;
         let intercept_win = None;
-        let namespace = neovim.create_namespace("atkpx").await?;
+        let namespace = neovim.create_namespace("prax").await?;
 
         let win = neovim.get_current_win().await?;
         win.set_buf(&list).await?;
@@ -42,20 +42,20 @@ impl View {
             .set_keymap(
                 "n",
                 "<c-q>",
-                ":lua require(\"atkpx\").submit_intercept()<cr>",
+                ":lua require(\"prax\").submit_intercept()<cr>",
                 vec![],
             )
             .await?;
 
-        list.set_keymap("n", "<cr>", ":lua require(\"atkpx\").detail()<cr>", vec![])
+        list.set_keymap("n", "<cr>", ":lua require(\"prax\").detail()<cr>", vec![])
             .await?;
 
         let intercept_group = neovim
-            .create_augroup("AtkIntercept", vec![("clear".into(), true.into())])
+            .create_augroup("PraxIntercept", vec![("clear".into(), true.into())])
             .await?;
 
         let detail_group = neovim
-            .create_augroup("AtkGroup", vec![("clear".into(), true.into())])
+            .create_augroup("PraxGroup", vec![("clear".into(), true.into())])
             .await?;
 
         let req_detail = neovim.create_buf(false, true).await?;
@@ -393,28 +393,28 @@ pub enum ViewOp {
 
 fn color_method(method: &str) -> &'static str {
     match method.to_uppercase().as_str() {
-        "GET" => "AtkpxMethodGET",
-        "HEAD" => "AtkpxMethodHEAD",
-        "POST" => "AtkpxMethodPOST",
-        "PUT" => "AtkpxMethodPUT",
-        "DELETE" => "AtkpxMethodDELETE",
-        "OPTIONS" => "AtkpxMethodOPTIONS",
-        "TRACE" => "AtkpxMethodTRACE",
-        "PATCH" => "AtkpxMethodPATCH",
+        "GET" => "PraxMethodGET",
+        "HEAD" => "PraxMethodHEAD",
+        "POST" => "PraxMethodPOST",
+        "PUT" => "PraxMethodPUT",
+        "DELETE" => "PraxMethodDELETE",
+        "OPTIONS" => "PraxMethodOPTIONS",
+        "TRACE" => "PraxMethodTRACE",
+        "PATCH" => "PraxMethodPATCH",
 
-        _ => "AtkpxMethodGET",
+        _ => "PraxMethodGET",
     }
 }
 
 fn color_status(status: u16) -> &'static str {
     match status {
-        100..=199 => "AtkpxStatusInfo",
-        200..=299 => "AtkpxStatusOk",
-        300..=399 => "AtkpxStatusRedirect",
-        400..=499 => "AtkpxStatusClientError",
-        500..=599 => "AtkpxStatusServerError",
+        100..=199 => "PraxStatusInfo",
+        200..=299 => "PraxStatusOk",
+        300..=399 => "PraxStatusRedirect",
+        400..=499 => "PraxStatusClientError",
+        500..=599 => "PraxStatusServerError",
 
-        _ => "AtkpxStatusServerError",
+        _ => "PraxStatusServerError",
     }
 }
 
