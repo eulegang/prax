@@ -11,57 +11,6 @@ mod trace;
 
 mod request {
     mod set {
-        mod method {
-            use super::super::super::*;
-
-            #[tokio::test]
-            async fn test() {
-                const IN: &str = "GET /\nhost: example.com:3000\n";
-                const OUT: &str = "POST /\nhost: example.com:3000\n";
-                const CONFIG: &str = r#"target("example.com:3000"):req(set(method, "POST"))"#;
-
-                let config = Config::test(CONFIG, ()).await.unwrap();
-
-                filter_check::check_req(&config, IN, OUT).await;
-            }
-        }
-
-        mod path {
-            use super::super::super::*;
-            #[tokio::test]
-            async fn bare() {
-                const IN: &str = "GET /\nhost: example.com:3000\n";
-                const OUT: &str = "GET /foobar\nhost: example.com:3000\n";
-                const CONFIG: &str = r#"target("example.com:3000"):req(set(path, "/foobar"))"#;
-
-                let config = Config::test(CONFIG, ()).await.unwrap();
-
-                filter_check::check_req(&config, IN, OUT).await;
-            }
-
-            #[tokio::test]
-            async fn with_query() {
-                const IN: &str = "GET /?q=hello\nhost: example.com:3000\n";
-                const OUT: &str = "GET /foobar?q=hello\nhost: example.com:3000\n";
-                const CONFIG: &str = r#"target("example.com:3000"):req(set(path, "/foobar"))"#;
-
-                let config = Config::test(CONFIG, ()).await.unwrap();
-
-                filter_check::check_req(&config, IN, OUT).await;
-            }
-
-            #[tokio::test]
-            async fn blank() {
-                const IN: &str = "GET \nhost: example.com:3000\n";
-                const OUT: &str = "GET /foobar\nhost: example.com:3000\n";
-                const CONFIG: &str = r#"target("example.com:3000"):req(set(path, "/foobar"))"#;
-
-                let config = Config::test(CONFIG, ()).await.unwrap();
-
-                filter_check::check_req(&config, IN, OUT).await;
-            }
-        }
-
         mod header {
             use super::super::super::*;
             const CONFIG: &str = r#"target("example.com:3000"):req(set(header("Authentication"), "Bearer foobarxyz"))"#;

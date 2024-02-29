@@ -92,32 +92,6 @@ fn given_query(world: &mut HttpWorld, name: String, value: String) {
     }
 }
 
-#[given(expr = "a query {}")]
-fn given_query_blank(world: &mut HttpWorld, name: String) {
-    match &mut world.subject {
-        Subject::Init => panic!("uninited"),
-        Subject::Request(request) => {
-            let uri = request.uri_mut().clone();
-            let mut parts = uri.into_parts();
-            if let Some(pq) = &mut parts.path_and_query {
-                let mut q = pq.query().map(Query::from).unwrap_or_default();
-                q.push(&name, None);
-
-                *pq = q.to_path_and_query(pq.path()).unwrap();
-            } else {
-                let mut q = Query::default();
-                q.push(&name, None);
-                parts.path_and_query = Some(q.to_path_and_query("").unwrap())
-            }
-
-            *request.uri_mut() = hyper::Uri::from_parts(parts).unwrap();
-        }
-        Subject::Response(_) => {
-            panic!("can't modify the query of a response")
-        }
-    }
-}
-
 #[given(expr = "a path {}")]
 fn given_path(world: &mut HttpWorld, path: String) {
     match &mut world.subject {
@@ -154,7 +128,9 @@ fn given_body(world: &mut HttpWorld, body: String) {
 
 #[when(expr = "filtered {}")]
 async fn filter(world: &mut HttpWorld, config: String) {
-    let config: &'static str = String::leak(config); // we don't care about leaks in tests
+    let mut pre = r#"target("example.com:3000"):"#.to_string();
+    pre.push_str(&config);
+    let config: &'static str = String::leak(pre); // we don't care about leaks in tests
     let config = Config::test(&config, ()).await.unwrap();
 
     match &mut world.subject {
