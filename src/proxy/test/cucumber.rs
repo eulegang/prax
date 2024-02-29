@@ -260,7 +260,7 @@ fn then_header(world: &mut HttpWorld, name: String, value: String) {
     };
 
     for (n, v) in map {
-        if dbg!(n == name) && dbg!(v == value) {
+        if n == name && v == value {
             return;
         }
     }
