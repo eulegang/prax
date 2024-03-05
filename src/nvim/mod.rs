@@ -36,7 +36,7 @@ impl NVim {
     ) -> eyre::Result<NVim> {
         let (send, recv) = tokio::sync::mpsc::channel(16);
 
-        let handler = Handler::new(token.clone(), send);
+        let handler = Handler::new(send);
         let single = conn_info.singleton();
 
         let (nvim, join) = io::IoConn::connect(&conn_info, handler).await?;

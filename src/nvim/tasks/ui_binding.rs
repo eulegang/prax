@@ -78,6 +78,10 @@ pub fn ui_binding(
                 Event::Chan(chan) => {
                     view.chan = chan;
                 }
+
+                Event::Shutdown => {
+                    let _ = view.shutdown().await;
+                }
             }
         }
     });

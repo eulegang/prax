@@ -8,6 +8,7 @@ use super::{Buffer, Neovim, Window};
 pub struct View {
     neovim: Neovim,
     pub chan: u64,
+    cancel: CancellationToken,
 
     list: Buffer,
     intercept: Buffer,
@@ -68,6 +69,7 @@ impl View {
         let s = Self {
             neovim,
             chan,
+            cancel: cancel.clone(),
 
             list,
             intercept,
@@ -359,6 +361,32 @@ impl View {
         if let Some(win) = self.intercept_win.take() {
             let _ = win.close(true).await;
         }
+
+        Ok(())
+    }
+
+    pub async fn shutdown(&mut self) -> eyre::Result<()> {
+        log::debug!("looking for windows to close");
+        for win in self.neovim.list_wins().await? {
+            let Ok(buf) = win.get_buf().await else {
+                continue;
+            };
+
+            let mut close = false;
+
+            close |= close || buf == self.list;
+            close |= close || buf == self.req_detail;
+            close |= close || buf == self.res_detail;
+            close |= close || buf == self.intercept;
+
+            if close {
+                log::debug!("closing window");
+                let _ = win.close(true).await;
+            }
+        }
+        log::debug!("looking for windows to close");
+
+        self.cancel.cancel();
 
         Ok(())
     }

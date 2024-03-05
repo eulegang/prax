@@ -1,5 +1,4 @@
 use nvim_rs::Value;
-use tokio_util::sync::CancellationToken;
 
 use super::Neovim;
 
@@ -8,18 +7,18 @@ pub enum Event {
     Detail,
     SubmitIntercept,
     DismissDetail,
+    Shutdown,
     Chan(u64),
 }
 
 #[derive(Clone)]
 pub struct Handler {
-    cancel: CancellationToken,
     chan: tokio::sync::mpsc::Sender<Event>,
 }
 
 impl Handler {
-    pub fn new(cancel: CancellationToken, chan: tokio::sync::mpsc::Sender<Event>) -> Self {
-        Handler { cancel, chan }
+    pub fn new(chan: tokio::sync::mpsc::Sender<Event>) -> Self {
+        Handler { chan }
     }
 }
 
@@ -30,7 +29,9 @@ impl nvim_rs::Handler for Handler {
     async fn handle_notify(&self, name: String, args: Vec<Value>, _: Neovim) {
         log::debug!("notify was sent: {name}");
         match name.as_str() {
-            "shutdown" => self.cancel.cancel(),
+            "shutdown" => {
+                let _ = self.chan.send(Event::Shutdown).await;
+            }
             "detail" => {
                 let _ = self.chan.send(Event::Detail).await;
             }
