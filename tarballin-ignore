@@ -1,0 +1,6 @@
+src/main.rs
+
+src/cli/**
+
+src/srv/**
+src/nvim/**
