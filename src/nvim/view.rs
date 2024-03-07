@@ -367,6 +367,7 @@ impl View {
 
     pub async fn shutdown(&mut self) -> eyre::Result<()> {
         log::debug!("looking for windows to close");
+
         for win in self.neovim.list_wins().await? {
             let Ok(buf) = win.get_buf().await else {
                 continue;
@@ -384,6 +385,20 @@ impl View {
                 let _ = win.close(true).await;
             }
         }
+
+        self.list
+            .delete(vec![("force".into(), true.into())])
+            .await?;
+        self.req_detail
+            .delete(vec![("force".into(), true.into())])
+            .await?;
+        self.res_detail
+            .delete(vec![("force".into(), true.into())])
+            .await?;
+        self.intercept
+            .delete(vec![("force".into(), true.into())])
+            .await?;
+
         log::debug!("looking for windows to close");
 
         self.cancel.cancel();
