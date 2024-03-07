@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use cucumber::{given, then, when, Parameter, World};
+use cucumber::{cli, given, then, when, Parameter, World};
 use http::{uri::PathAndQuery, HeaderName, HeaderValue, Method, StatusCode};
 use hyper::{Request, Response};
 
-use crate::{
-    proxy::{query::Query, Config},
+use prax::{
+    proxy::{Config, Query},
     Filter,
 };
 
@@ -19,8 +19,8 @@ enum Subject {
     #[default]
     Init,
 
-    Request(crate::Req<Vec<u8>>),
-    Response(crate::Res<Vec<u8>>),
+    Request(prax::Req<Vec<u8>>),
+    Response(prax::Res<Vec<u8>>),
 }
 
 #[derive(Debug, Default, Eq, Parameter, PartialEq)]
@@ -244,7 +244,25 @@ fn then_header(world: &mut HttpWorld, name: String, value: String) {
     panic!("failed to find header {name:?}: {value:?} in {map:?}")
 }
 
-#[tokio::test]
-async fn cucumber() {
-    HttpWorld::run("tests/features").await
+#[derive(cli::Args)] // re-export of `clap::Args`
+struct CustomOpts {
+    #[arg(long)]
+    test_threads: Option<usize>,
+}
+
+fn main() {
+    println!("args found {:?}", std::env::args());
+
+    let opts = cli::Opts::<_, _, _, CustomOpts>::parsed();
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(opts.custom.test_threads.unwrap_or(1))
+        .build()
+        .unwrap();
+
+    rt.block_on(async {
+        HttpWorld::cucumber()
+            .with_cli(opts)
+            .run_and_exit("cucumber/requests")
+            .await;
+    })
 }

@@ -13,6 +13,7 @@ mod interp;
 mod test;
 
 pub use err::ConfError;
+pub use query::Query;
 
 use crate::Filter;
 

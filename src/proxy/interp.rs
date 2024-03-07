@@ -60,7 +60,6 @@ impl Interp {
         Interp { sender }
     }
 
-    #[cfg(test)]
     pub fn test(
         content: &'static str,
         proxy: tokio::sync::oneshot::Sender<mlua::Result<Proxy>>,

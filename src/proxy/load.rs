@@ -89,7 +89,6 @@ impl<F> Config<F>
 where
     F: Filter + Clone + Send + Sync + 'static,
 {
-    #[cfg(test)]
     pub async fn test(content: &'static str, intercept: F) -> eyre::Result<Self> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
