@@ -25,7 +25,7 @@ impl std::str::FromStr for Meth {
     }
 }
 
-#[given(expr = "a {meth} request")]
+#[given(expr = "the method is {meth}")]
 fn given_method(world: &mut ReqWorld, method: Meth) {
     *world.subject.method_mut() = method.0;
 }
@@ -56,7 +56,7 @@ fn given_query(world: &mut ReqWorld, name: String, value: String) {
     *world.subject.uri_mut() = hyper::Uri::from_parts(parts).unwrap();
 }
 
-#[given(expr = "a path {}")]
+#[given(expr = "the path is {}")]
 fn given_path(world: &mut ReqWorld, path: String) {
     let uri = world.subject.uri().clone();
     let mut parts = uri.into_parts();
@@ -73,7 +73,7 @@ fn given_path(world: &mut ReqWorld, path: String) {
     *world.subject.uri_mut() = hyper::Uri::from_parts(parts).unwrap();
 }
 
-#[given(expr = "a body {}")]
+#[given(expr = "the body is {}")]
 fn given_body(world: &mut ReqWorld, body: String) {
     *world.subject.body_mut() = body.as_bytes().to_vec();
 }

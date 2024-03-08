@@ -4,3 +4,8 @@ src/cli/**
 
 src/srv/**
 src/nvim/**
+
+cucumber/*.rs
+    ((macro_invocation macro: (identifier) @id) (#eq? @id "panic")) @panic
+    ((macro_invocation macro: (identifier) @id) (#eq? @id "assert_eq")) @assert_eq
+    ((macro_invocation macro: (identifier) @id) (#eq? @id "assert")) @assert
