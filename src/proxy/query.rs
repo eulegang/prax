@@ -41,16 +41,16 @@ impl<'a> Iterator for QueryIter<'a> {
     type Item = (&'a str, Option<&'a str>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.pos == usize::MAX {
+        if self.pos == self.query.buf.len() {
             return None;
         }
 
         let rest = &self.query.buf[self.pos..];
         let sub = if let Some(next) = rest.find('&') {
-            self.pos = next;
+            self.pos = next + 1;
             &rest[0..next]
         } else {
-            self.pos = usize::MAX;
+            self.pos = self.query.buf.len();
             rest
         };
 
@@ -74,4 +74,29 @@ impl std::fmt::Display for Query {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.buf)
     }
+}
+
+impl std::fmt::Debug for Query {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\"{}\"", self.buf)
+    }
+}
+
+#[test]
+fn iteration() {
+    assert_eq!(Query::from("").iter().collect::<Vec<_>>(), vec![]);
+    assert_eq!(
+        Query::from("subject=world").iter().collect::<Vec<_>>(),
+        vec![("subject", Some("world"))]
+    );
+    assert_eq!(
+        Query::from("subject").iter().collect::<Vec<_>>(),
+        vec![("subject", None)]
+    );
+    assert_eq!(
+        Query::from("subject=world&greeting=hello")
+            .iter()
+            .collect::<Vec<_>>(),
+        vec![("subject", Some("world")), ("greeting", Some("hello"))]
+    );
 }

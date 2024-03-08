@@ -4,9 +4,10 @@ Feature: Setting queries
         When filtered req(set(query("q"), "hello"))
         Then query q is hello
 
-        #     Scenario: adds additional query
-        #         Given the method is GET
-        #         And a query q is world
-        #         When filtered req(set(query("q"), "hello"))
-        #         Then query q is hello
-        # 
+    Scenario: adds additional query
+        Given the method is GET
+        And a query q is world
+        When filtered req(set(query("q"), "hello"))
+        Then query q is hello
+        Then query q is world
+

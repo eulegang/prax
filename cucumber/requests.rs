@@ -82,8 +82,8 @@ fn given_body(world: &mut ReqWorld, body: String) {
 async fn filter(world: &mut ReqWorld, config: String) {
     let mut pre = r#"target("example.com:3000"):"#.to_string();
     pre.push_str(&config);
-    let config: &'static str = String::leak(pre); // we don't care about leaks in tests
-    let config = Config::test(&config, ()).await.unwrap();
+    let config_text: &'static str = String::leak(pre); // we don't care about leaks in tests
+    let config = Config::test(&config_text, ()).await.unwrap();
 
     let _ = config
         .modify_request("example.com:3000", &mut world.subject)
