@@ -1,7 +1,9 @@
 use clap::Parser;
 use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
+/// an attack proxy designed with neovim in mind
 #[derive(Parser)]
+#[clap(version, author = "eulegang", long_about = None)]
 pub struct Cli {
     /// attack endpoint
     #[clap(short, long, default_value = "127.0.0.1:8091")]
