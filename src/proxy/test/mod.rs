@@ -8,36 +8,6 @@ use trace::Trace;
 mod filter_check;
 mod trace;
 
-mod response {
-    mod set {
-        mod header {
-            use super::super::super::*;
-            const CONFIG: &str =
-                r#"target("example.com:3000"):resp(set(header("server"), "foobar"))"#;
-
-            #[tokio::test]
-            async fn missing() {
-                const IN: &str = "200\nhost: example.com:3000\n";
-                const OUT: &str = "200\nhost: example.com:3000\nserver: foobar\n";
-
-                let config = Config::test(CONFIG, ()).await.unwrap();
-
-                filter_check::check_res(&config, IN, OUT).await;
-            }
-
-            #[tokio::test]
-            async fn set_override() {
-                const IN: &str = "200\nhost: example.com:3000\nserver: nginx\n";
-                const OUT: &str = "200\nhost: example.com:3000\nserver: foobar\n";
-
-                let config = Config::test(CONFIG, ()).await.unwrap();
-
-                filter_check::check_res(&config, IN, OUT).await;
-            }
-        }
-    }
-}
-
 mod intercept {
     mod negative {
         const CONFIG: &str = r#"target("example.com:3000")"#;

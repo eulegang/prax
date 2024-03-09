@@ -52,9 +52,14 @@ tokinotify = "0.1.0"
 cucumber = "0.20.2"
 
 [[test]]
-name = "cucumber"
+name = "requests"
 path = "cucumber/requests.rs"
 test = true
 harness = false
 
 
+[[test]]
+name = "resonses"
+path = "cucumber/responses.rs"
+test = true
+harness = false
