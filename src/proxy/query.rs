@@ -32,6 +32,12 @@ impl Query {
     }
 }
 
+impl From<&PathAndQuery> for Query {
+    fn from(pq: &PathAndQuery) -> Self {
+        pq.query().map(Query::from).unwrap_or_default()
+    }
+}
+
 pub struct QueryIter<'a> {
     query: &'a Query,
     pos: usize,

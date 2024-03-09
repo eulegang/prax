@@ -75,7 +75,7 @@ where
 
                         let mut parts = req.uri().clone().into_parts();
                         let pq = if let Some(pq) = parts.path_and_query {
-                            let mut query = pq.query().map(Query::from).unwrap_or_default();
+                            let mut query = Query::from(&pq);
                             query.push(key, Some(value));
 
                             query.to_path_and_query(pq.path())?

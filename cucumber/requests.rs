@@ -43,7 +43,7 @@ fn given_query(world: &mut ReqWorld, name: String, value: String) {
     let uri = world.subject.uri().clone();
     let mut parts = uri.into_parts();
     if let Some(pq) = &mut parts.path_and_query {
-        let mut q = pq.query().map(Query::from).unwrap_or_default();
+        let mut q = Query::from(&*pq);
         q.push(&name, Some(&value));
 
         *pq = q.to_path_and_query(pq.path()).unwrap();
