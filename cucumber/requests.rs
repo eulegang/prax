@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use cucumber::{cli, given, then, when, Parameter, World};
+use cucumber::{cli, gherkin::Step, given, then, when, Parameter, World};
 use http::{uri::PathAndQuery, HeaderName, HeaderValue, Method};
 
 use prax::{
@@ -76,6 +76,18 @@ fn given_path(world: &mut ReqWorld, path: String) {
 #[given(expr = "the body is {}")]
 fn given_body(world: &mut ReqWorld, body: String) {
     *world.subject.body_mut() = body.as_bytes().to_vec();
+}
+
+#[when(expr = "handled by")]
+async fn handled(world: &mut ReqWorld, step: &Step) {
+    let doc = step.docstring().expect("nonempty handler program");
+    let config_text = String::leak(doc.clone());
+    let config = Config::test(config_text, ()).await.unwrap();
+
+    let _ = config
+        .modify_request("example.com:3000", &mut world.subject)
+        .await
+        .unwrap();
 }
 
 #[when(expr = "filtered {}")]
@@ -157,6 +169,7 @@ fn main() {
     let opts = cli::Opts::<_, _, _, CustomOpts>::parsed();
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(opts.custom.test_threads.unwrap_or(1))
+        .enable_all()
         .build()
         .unwrap();
 
