@@ -7,12 +7,12 @@ pub fn runloop(join: JoinHandle<Result<(), Box<LoopError>>>, token: Option<Cance
         match join.await {
             Ok(Ok(())) => {}
             Err(loop_err) => {
-                log::error!("io loop error: {loop_err}");
+                tracing::error!("io loop error: {loop_err}");
             }
 
             Ok(Err(e)) => {
                 if !e.is_channel_closed() {
-                    log::error!("interaction error: {e}");
+                    tracing::error!("interaction error: {e}");
                 }
             }
         }

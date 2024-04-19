@@ -38,7 +38,7 @@ where
             let mut notify = match INotify::new() {
                 Ok(i) => i,
                 Err(e) => {
-                    log::error!("failed to start inotify: {e}");
+                    tracing::error!("failed to start inotify: {e}");
                     return;
                 }
             };
@@ -46,7 +46,7 @@ where
             let i = intercept.clone();
 
             if let Err(e) = notify.add(&watch, interest) {
-                log::error!("failed to start watch: {e}");
+                tracing::error!("failed to start watch: {e}");
                 return;
             }
 
@@ -54,16 +54,16 @@ where
                 let event = match notify.watch().await {
                     Ok(e) => e,
                     Err(e) => {
-                        log::error!("notify error: {e}");
+                        tracing::error!("notify error: {e}");
                         continue;
                     }
                 };
 
-                log::debug!("event = {event:?}");
+                tracing::debug!("event = {event:?}");
 
                 if event.mask.contains(Mask::IGNORED) {
                     if let Err(e) = notify.add(&watch, interest) {
-                        log::error!("failed to readd watch: {e}");
+                        tracing::error!("failed to readd watch: {e}");
                     }
                     continue;
                 }
@@ -71,11 +71,11 @@ where
                 match Config::load(&path, i.clone()).await {
                     Ok(config) => {
                         if tx.send(config).await.is_err() {
-                            log::error!("failed to send config");
+                            tracing::error!("failed to send config");
                         }
                     }
                     Err(err) => {
-                        log::error!("failed to load config {err}");
+                        tracing::error!("failed to load config {err}");
                     }
                 }
             }

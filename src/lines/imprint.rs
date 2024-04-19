@@ -114,7 +114,7 @@ fn extract_status(uri: &Uri, lines: &str) -> crate::Result<(hyper::Method, hyper
 
     let uri = builder.path_and_query(path).build()?;
 
-    log::debug!("modiified {method:?} {uri:?}");
+    tracing::debug!("modiified {method:?} {uri:?}");
 
     Ok((method, uri))
 }

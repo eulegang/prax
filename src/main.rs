@@ -4,7 +4,6 @@ use std::{fs::File, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
 use clap::Parser;
-use log::LevelFilter;
 use prax::proxy::Config;
 
 mod cli;
@@ -17,30 +16,31 @@ async fn main() -> eyre::Result<()> {
     let cli = cli::Cli::parse();
 
     if let Some(path) = cli.log {
-        simplelog::WriteLogger::init(
-            LevelFilter::Trace,
-            simplelog::Config::default(),
-            File::create(path)?,
-        )?;
-    } else if std::env::var("RUST_LOG").is_err() {
-        pretty_env_logger::formatted_builder()
-            .filter_level(LevelFilter::Info)
-            .init();
-    } else {
-        pretty_env_logger::init()
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_file(true)
+            .with_line_number(true)
+            .with_thread_ids(true)
+            .with_target(true)
+            .with_writer(File::options().create(true).append(true).open(path)?)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)?;
     }
 
     let tls = Tls::load(cli.tls)?;
     let token = CancellationToken::new();
 
     if let Some(nvim) = cli.nvim {
-        log::trace!("loading nvim connection");
+        let span = tracing::trace_span!("loading nvim connection", info = ?nvim);
+        let _conn = span.enter();
+
         let history: &'static Hist = Box::leak(Box::default());
         let nvim = nvim::NVim::connect(nvim, token.clone(), history).await?;
         let intercept = nvim.intercept();
 
         if let Some(path) = cli.configure {
-            log::debug!("path is correct");
+            tracing::debug!(?path, "configuring proxy");
 
             let config = Config::load(&path, intercept).await?;
 
@@ -49,7 +49,7 @@ async fn main() -> eyre::Result<()> {
 
             #[cfg(target_os = "linux")]
             let reload = if cli.watch {
-                Some(config.watch(path))
+                Some(config.watch(path.clone()))
             } else {
                 None
             };
@@ -59,10 +59,12 @@ async fn main() -> eyre::Result<()> {
 
             let s = server.clone();
             if let Some(mut reload) = reload {
-                log::debug!("watching for reloads");
+                let watch_span =
+                    tracing::debug_span!("watching for reloads", path = %path.display());
+
                 tokio::spawn(async move {
                     while let Some(filter) = reload.recv().await {
-                        log::debug!("found reload");
+                        tracing::debug!(parent: &watch_span, "found reload");
                         s.replace(filter).await;
                     }
                 });

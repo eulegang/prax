@@ -39,7 +39,7 @@ where
                             _ = token.cancelled() => { }
                             res = http1::Builder::new().serve_connection(io, srv).with_upgrades() => {
                                 if let Err(err) = res {
-                                    log::error!("Error service connection: {:?}", err);
+                                    tracing::error!("Error service connection: {:?}", err);
                                 }
                             }
                         }

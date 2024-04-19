@@ -27,7 +27,7 @@ impl nvim_rs::Handler for Handler {
     type Writer = super::io::IoConn;
 
     async fn handle_notify(&self, name: String, args: Vec<Value>, _: Neovim) {
-        log::debug!("notify was sent: {name}");
+        tracing::debug!("notify was sent: {name}");
         match name.as_str() {
             "shutdown" => {
                 let _ = self.chan.send(Event::Shutdown).await;

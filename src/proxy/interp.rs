@@ -106,7 +106,7 @@ impl Interp {
 
         while let Some(s) = rx.blocking_recv() {
             let Some(func) = funcs.get(s.selector) else {
-                log::error!("invalid func dereferenced");
+                tracing::error!("invalid func dereferenced");
                 continue;
             };
 
@@ -114,14 +114,14 @@ impl Interp {
                 Ok(r) => r,
                 Err(e) => {
                     if s.chan.send(Err(e)).is_err() {
-                        log::error!("failed value back");
+                        tracing::error!("failed value back");
                     }
                     continue;
                 }
             };
 
             if s.chan.send(Ok(r)).is_err() {
-                log::error!("error sending value back");
+                tracing::error!("error sending value back");
                 continue;
             }
         }
@@ -227,7 +227,7 @@ fn focus(lua: &Lua, (): ()) -> mlua::Result<()> {
 
 fn target(lua: &Lua, (hostname,): (String,)) -> mlua::Result<TargetRef> {
     let mut data = app_data_mut(lua)?;
-    log::info!("Targeting {}", &hostname);
+    tracing::info!("Targeting {}", &hostname);
 
     let r = TargetRef {
         hostname: hostname.clone(),

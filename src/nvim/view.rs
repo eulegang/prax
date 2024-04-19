@@ -131,7 +131,7 @@ impl View {
     }
 
     async fn handle(&mut self, op: ViewOp) {
-        log::trace!("handling view operation: {op:?}");
+        tracing::trace!("handling view operation: {op:?}");
         let res = match op {
             ViewOp::NewRequest {
                 entry,
@@ -148,7 +148,7 @@ impl View {
         };
 
         if let Err(e) = res {
-            log::error!("Failed to handle view op {e}");
+            tracing::error!("Failed to handle view op {e}");
         }
     }
 
@@ -366,7 +366,7 @@ impl View {
     }
 
     pub async fn shutdown(&mut self) -> eyre::Result<()> {
-        log::debug!("looking for windows to close");
+        tracing::debug!("looking for windows to close");
 
         for win in self.neovim.list_wins().await? {
             let Ok(buf) = win.get_buf().await else {
@@ -381,7 +381,7 @@ impl View {
             close |= close || buf == self.intercept;
 
             if close {
-                log::debug!("closing window");
+                tracing::debug!("closing window");
                 let _ = win.close(true).await;
             }
         }
@@ -399,7 +399,7 @@ impl View {
             .delete(vec![("force".into(), true.into())])
             .await?;
 
-        log::debug!("looking for windows to close");
+        tracing::debug!("looking for windows to close");
 
         self.cancel.cancel();
 

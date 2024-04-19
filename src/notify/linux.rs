@@ -58,7 +58,7 @@ impl INotify {
     }
 
     pub fn add(&mut self, path: &Path, mask: Mask) -> io::Result<Watch> {
-        log::debug!("adding watch {} {:?}", path.display(), mask);
+        tracing::debug!("adding watch {} {:?}", path.display(), mask);
         let path: &OsStr = path.as_ref();
         let res = unsafe { inotify_add_watch(self.fd, path.as_bytes().as_ptr(), mask.0) };
         if res == -1 {

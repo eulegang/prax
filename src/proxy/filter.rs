@@ -15,13 +15,13 @@ where
     F: Filter + Sync,
 {
     async fn modify_request(&self, hostname: &str, req: &mut crate::Req<Vec<u8>>) -> Result<()> {
-        log::debug!("applying config request rules to {hostname}");
+        tracing::debug!("applying config request rules to {hostname}");
         let Some(target) = &self.proxy.targets.iter().find(|t| t.hostname == hostname) else {
             return Ok(());
         };
 
         for rule in &target.req {
-            log::trace!("applying request rule {rule:?}");
+            tracing::trace!("applying request rule {rule:?}");
 
             match rule {
                 Rule::Dump => {
@@ -35,9 +35,9 @@ where
                     }
 
                     if let Ok(s) = std::str::from_utf8(&buf) {
-                        log::info!("dump resp \n{s}")
+                        tracing::info!("dump resp \n{s}")
                     } else {
-                        log::error!("response is not text");
+                        tracing::error!("response is not text");
                     }
                 }
 
@@ -104,7 +104,7 @@ where
                         let res = match sub.subst(&self.interp, method).await {
                             Ok(res) => res,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         };
@@ -112,7 +112,7 @@ where
                         *req.method_mut() = match Method::from_str(&res) {
                             Ok(method) => method,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         }
@@ -124,7 +124,7 @@ where
                         let value = match sub.subst(&self.interp, path).await {
                             Ok(res) => res,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         };
@@ -159,7 +159,7 @@ where
                                     let val = match sub.subst(&self.interp, val).await {
                                         Ok(res) => res,
                                         Err(e) => {
-                                            log::error!("{}", e);
+                                            tracing::error!("{}", e);
                                             continue;
                                         }
                                     };
@@ -176,7 +176,7 @@ where
                                 {
                                     Ok(s) => Some(s),
                                     Err(e) => {
-                                        log::error!("{e}");
+                                        tracing::error!("{e}");
                                         continue;
                                     }
                                 };
@@ -191,7 +191,7 @@ where
                                 let val = match std::str::from_utf8(value.as_bytes()) {
                                     Ok(s) => s,
                                     Err(e) => {
-                                        log::error!("{}", e);
+                                        tracing::error!("{}", e);
                                         continue;
                                     }
                                 };
@@ -199,7 +199,7 @@ where
                                 let res = match sub.subst(&self.interp, val.into()).await {
                                     Ok(res) => res,
                                     Err(e) => {
-                                        log::error!("{}", e);
+                                        tracing::error!("{}", e);
                                         continue;
                                     }
                                 };
@@ -207,7 +207,7 @@ where
                                 *value = match HeaderValue::from_str(&res) {
                                     Ok(v) => v,
                                     Err(e) => {
-                                        log::error!("{}", e);
+                                        tracing::error!("{}", e);
                                         continue;
                                     }
                                 };
@@ -218,7 +218,7 @@ where
                         let body = match std::str::from_utf8(req.body()) {
                             Ok(s) => s,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         };
@@ -226,7 +226,7 @@ where
                         let res = match sub.subst(&self.interp, body.to_string()).await {
                             Ok(s) => s,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         };
@@ -237,18 +237,18 @@ where
             }
         }
 
-        log::trace!("finished applying config request rules to {hostname}");
+        tracing::trace!("finished applying config request rules to {hostname}");
         Ok(())
     }
 
     async fn modify_response(&self, hostname: &str, res: &mut crate::Res<Vec<u8>>) -> Result<()> {
-        log::debug!("applying response rules to {hostname}");
+        tracing::debug!("applying response rules to {hostname}");
         let Some(target) = self.proxy.targets.iter().find(|t| t.hostname == hostname) else {
             return Ok(());
         };
 
         for rule in &target.resp {
-            log::trace!("applying response rule {rule:?}");
+            tracing::trace!("applying response rule {rule:?}");
 
             match rule {
                 Rule::Dump => {
@@ -266,9 +266,9 @@ where
                     buf.extend_from_slice(res.body());
 
                     if let Ok(s) = std::str::from_utf8(&buf) {
-                        log::info!("dump res\n{s}")
+                        tracing::info!("dump res\n{s}")
                     } else {
-                        log::error!("response is not text");
+                        tracing::error!("response is not text");
                     }
                 }
 
@@ -304,7 +304,7 @@ where
                         let new = match sub.sub_num(&self.interp, number as i64).await {
                             Ok(s) => s,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         };
@@ -312,7 +312,7 @@ where
                         let new = match u16::try_from(new) {
                             Ok(n) => n,
                             Err(e) => {
-                                log::error!("{e}");
+                                tracing::error!("{e}");
                                 continue;
                             }
                         };
@@ -320,7 +320,7 @@ where
                         let new = match StatusCode::from_u16(new) {
                             Ok(n) => n,
                             Err(e) => {
-                                log::error!("{e}");
+                                tracing::error!("{e}");
                                 continue;
                             }
                         };
@@ -333,7 +333,7 @@ where
                                 let val = match std::str::from_utf8(value.as_bytes()) {
                                     Ok(s) => s,
                                     Err(e) => {
-                                        log::error!("{}", e);
+                                        tracing::error!("{}", e);
                                         continue;
                                     }
                                 };
@@ -341,7 +341,7 @@ where
                                 let new_val = match sub.subst(&self.interp, val.into()).await {
                                     Ok(res) => res,
                                     Err(e) => {
-                                        log::error!("{}", e);
+                                        tracing::error!("{}", e);
                                         continue;
                                     }
                                 };
@@ -349,7 +349,7 @@ where
                                 *value = match HeaderValue::from_str(&new_val) {
                                     Ok(v) => v,
                                     Err(e) => {
-                                        log::error!("{}", e);
+                                        tracing::error!("{}", e);
                                         continue;
                                     }
                                 };
@@ -361,7 +361,7 @@ where
                         let body = match std::str::from_utf8(res.body()) {
                             Ok(s) => s,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         };
@@ -369,7 +369,7 @@ where
                         let new = match sub.subst(&self.interp, body.to_string()).await {
                             Ok(s) => s,
                             Err(e) => {
-                                log::error!("{}", e);
+                                tracing::error!("{}", e);
                                 continue;
                             }
                         };

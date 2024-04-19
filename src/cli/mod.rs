@@ -34,7 +34,7 @@ pub struct Cli {
     pub tls: CertOpts,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NvimConnInfo {
     Stdin,
     Unix(PathBuf),

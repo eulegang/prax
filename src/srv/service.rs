@@ -34,7 +34,7 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response>> + Send>>;
 
     fn call(&self, req: Req<Incoming>) -> Self::Future {
-        log::trace!("starting to service request");
+        tracing::trace!("starting to service request");
         let Some(host) = req.uri().host() else {
             return Box::pin(async { Err(Error::NoHost) });
         };
@@ -43,7 +43,7 @@ where
         let port = req.uri().port_u16().unwrap_or(80);
         let lookup = format!("{host}:{port}");
 
-        log::trace!("request host detected: {lookup:?}");
+        tracing::trace!("request host detected: {lookup:?}");
 
         let filter = self.filter.clone();
         let scribe = self.scribe;
@@ -66,31 +66,31 @@ where
                 let host = host.clone();
 
                 tokio::spawn(async move {
-                    log::trace!("upgrading connection");
+                    tracing::trace!("upgrading connection");
                     let upgrade = match hyper::upgrade::on(req).await {
                         Ok(u) => u,
                         Err(e) => {
-                            log::error!("failed to upgrade connection {e}");
+                            tracing::error!("failed to upgrade connection {e}");
                             return;
                         }
                     };
 
-                    log::trace!("upgraded connection");
+                    tracing::trace!("upgraded connection");
 
                     let io = TokioIo::new(upgrade);
 
-                    log::trace!("creating acceptor connection");
+                    tracing::trace!("creating acceptor connection");
                     let acceptor = TlsAcceptor::from(server_tls);
                     let incoming = match acceptor.accept(io).await {
                         Ok(i) => i,
                         Err(e) => {
-                            log::error!("failed to accept {e}");
+                            tracing::error!("failed to accept {e}");
                             return;
                         }
                     };
                     let tunnel = TokioIo::new(incoming);
 
-                    log::trace!("connecting to target");
+                    tracing::trace!("connecting to target");
                     let servername = ServerName::try_from(host.clone()).unwrap();
                     let stream = TcpStream::connect(&lookup).await.unwrap();
                     let io = TokioIo::new(stream);
@@ -100,22 +100,22 @@ where
                     let connect = match connector.connect(servername, TokioIo::new(io)).await {
                         Ok(c) => c,
                         Err(e) => {
-                            log::error!("failed to make connection to target {e}");
+                            tracing::error!("failed to make connection to target {e}");
                             return;
                         }
                     };
 
-                    log::trace!("creating sender");
+                    tracing::trace!("creating sender");
                     let (sender, conn) =
                         match hyper::client::conn::http1::handshake(TokioIo::new(connect)).await {
                             Ok(o) => o,
                             Err(e) => {
-                                log::error!("failed to handshake {e}");
+                                tracing::error!("failed to handshake {e}");
                                 return;
                             }
                         };
 
-                    log::trace!("spawning sender poller");
+                    tracing::trace!("spawning sender poller");
                     tokio::spawn(async move {
                         if let Err(e) = conn.await {
                             eprintln!("Error in connection: {}", e);
@@ -124,14 +124,14 @@ where
 
                     let sender = Arc::new(Mutex::new(sender));
 
-                    log::trace!("spawning tunneled server");
+                    tracing::trace!("spawning tunneled server");
                     tokio::spawn(async move {
                         tokio::select! {
                             () = token.cancelled() => { }
 
                             res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, host, server: srv } ).with_upgrades() => {
                                 if let Err(err) = res {
-                                    log::error!("Error service connection: {:?}", err);
+                                    tracing::error!("Error service connection: {:?}", err);
                                 }
                             }
                         }
@@ -151,22 +151,22 @@ where
 
             filter.modify_request(&lookup, &mut req).await?;
 
-            log::trace!("sending modified request to scribe");
+            tracing::trace!("sending modified request to scribe");
             let ticket = scribe.report_request(&req).await;
-            log::trace!("done sending modified request to scribe");
+            tracing::trace!("done sending modified request to scribe");
 
             let stream = TcpStream::connect(&lookup).await.unwrap();
             let io = TokioIo::new(stream);
 
-            log::trace!("starting connection to requested host");
+            tracing::trace!("starting connection to requested host");
             let (mut sender, conn) = Builder::new().handshake::<_, Full<Bytes>>(io).await?;
             tokio::task::spawn(async move {
                 if let Err(err) = conn.await {
-                    log::error!("Connection failed: {:?}", err);
+                    tracing::error!("Connection failed: {:?}", err);
                 }
             });
 
-            log::trace!("established connection to requested host");
+            tracing::trace!("established connection to requested host");
 
             let mut builder = Uri::builder();
             if let Some(pq) = req.uri().path_and_query() {
@@ -180,11 +180,11 @@ where
 
             filter.modify_response(&lookup, &mut res).await?;
 
-            log::trace!("sending modified response to scribe");
+            tracing::trace!("sending modified response to scribe");
             scribe.report_response(ticket, &res).await;
-            log::trace!("done sending modified response to scribe");
+            tracing::trace!("done sending modified response to scribe");
 
-            log::trace!("finished to service request");
+            tracing::trace!("finished to service request");
             Ok(res.map(|b| b.into()))
         })
     }
@@ -201,16 +201,16 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response>> + Send>>;
 
     fn call(&self, req: Req<Incoming>) -> Self::Future {
-        log::trace!("starting to service request");
+        tracing::trace!("starting to service request");
 
-        log::trace!("servicing tunneled request: {req:?}");
+        tracing::trace!("servicing tunneled request: {req:?}");
         let host = req.uri().host().unwrap_or_else(|| &self.host);
 
         let host = host.to_string();
         let port = req.uri().port_u16().unwrap_or(80);
         let lookup = format!("{host}:{port}");
 
-        log::trace!("request host detected: {lookup:?}");
+        tracing::trace!("request host detected: {lookup:?}");
 
         let filter = self.server.filter.clone();
         let scribe = self.server.scribe;
@@ -264,7 +264,7 @@ where
 
                         res = hyper::server::conn::http1::Builder::new().serve_connection(tunnel, Tunnel { sender, host, server: srv } ) => {
                             if let Err(err) = res {
-                                log::error!("Error service connection: {:?}", err);
+                                tracing::error!("Error service connection: {:?}", err);
                             }
                         }
                     }
@@ -284,9 +284,9 @@ where
 
             filter.modify_request(&lookup, &mut req).await?;
 
-            log::trace!("sending modified request to scribe");
+            tracing::trace!("sending modified request to scribe");
             let ticket = scribe.report_request(&req).await;
-            log::trace!("done sending modified request to scribe");
+            tracing::trace!("done sending modified request to scribe");
 
             let mut builder = Uri::builder();
             if let Some(pq) = req.uri().path_and_query() {
@@ -304,11 +304,11 @@ where
 
             filter.modify_response(&lookup, &mut res).await?;
 
-            log::trace!("sending modified response to scribe");
+            tracing::trace!("sending modified response to scribe");
             scribe.report_response(ticket, &res).await;
-            log::trace!("done sending modified response to scribe");
+            tracing::trace!("done sending modified response to scribe");
 
-            log::trace!("finished to service request");
+            tracing::trace!("finished to service request");
             Ok(res.map(|b| b.into()))
         })
     }
