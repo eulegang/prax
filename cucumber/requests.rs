@@ -157,15 +157,13 @@ fn then_header(world: &mut ReqWorld, name: String, value: String) {
     panic!("failed to find header {name:?}: {value:?} in {map:?}")
 }
 
-#[derive(cli::Args)] // re-export of `clap::Args`
+#[derive(cli::Args)]
 struct CustomOpts {
     #[arg(long)]
     test_threads: Option<usize>,
 }
 
 fn main() {
-    println!("args found {:?}", std::env::args());
-
     let opts = cli::Opts::<_, _, _, CustomOpts>::parsed();
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(opts.custom.test_threads.unwrap_or(1))
