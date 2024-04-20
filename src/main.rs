@@ -2,6 +2,7 @@ use prax::hist::Hist;
 use srv::Tls;
 use std::{fs::File, sync::Arc};
 use tokio_util::sync::CancellationToken;
+use tracing::Level;
 
 use clap::Parser;
 use prax::proxy::Config;
@@ -18,6 +19,7 @@ async fn main() -> eyre::Result<()> {
     if let Some(path) = cli.log {
         let subscriber = tracing_subscriber::fmt()
             .json()
+            .with_max_level(Level::TRACE)
             .with_file(true)
             .with_line_number(true)
             .with_thread_ids(true)
