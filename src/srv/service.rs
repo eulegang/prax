@@ -92,7 +92,7 @@ where
 
                     tracing::trace!("connecting to target");
                     let servername = ServerName::try_from(host.clone()).unwrap();
-                    let stream = TcpStream::connect(&lookup).await.unwrap();
+                    let stream = retry(|| TcpStream::connect(&lookup)).await.unwrap();
                     let io = TokioIo::new(stream);
 
                     let connector = TlsConnector::from(client_tls);
@@ -155,7 +155,12 @@ where
             let ticket = scribe.report_request(&req).await;
             tracing::trace!("done sending modified request to scribe");
 
-            let stream = TcpStream::connect(&lookup).await.unwrap();
+            let Ok(stream) = retry(|| TcpStream::connect(&lookup)).await else {
+                let body = "".as_bytes().into();
+                let builder = Response::builder().status(502).body(body).unwrap();
+                return Ok(builder);
+            };
+
             let io = TokioIo::new(stream);
 
             tracing::trace!("starting connection to requested host");
@@ -241,7 +246,7 @@ where
                 let tunnel = TokioIo::new(incoming);
 
                 let servername = ServerName::try_from(host.clone()).unwrap();
-                let stream = TcpStream::connect(&lookup).await.unwrap();
+                let stream = retry(|| TcpStream::connect(&lookup)).await.unwrap();
                 let io = TokioIo::new(stream);
 
                 let connector = TlsConnector::from(client_tls);
@@ -336,4 +341,26 @@ async fn collect(mut incoming: Incoming) -> Result<Vec<u8>> {
     }
 
     Ok(buf)
+}
+
+const WAIT: [u64; 5] = [250, 500, 1000, 2000, 4000];
+async fn retry<T, E, F>(op: impl Fn() -> F) -> std::result::Result<T, E>
+where
+    F: Future<Output = std::result::Result<T, E>>,
+{
+    let mut it = WAIT.into_iter();
+
+    loop {
+        match op().await {
+            Ok(t) => return Ok(t),
+            Err(e) => {
+                if let Some(wait) = it.next() {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(wait)).await;
+                    continue;
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
 }
