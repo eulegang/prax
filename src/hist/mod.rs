@@ -60,9 +60,6 @@ pub struct Hist {
     events: broadcast::Sender<HistoryEvent>,
 }
 
-#[derive(Default, Debug)]
-pub struct History(Vec<Entry>);
-
 impl Scribe for Hist {
     type Ticket = usize;
 
