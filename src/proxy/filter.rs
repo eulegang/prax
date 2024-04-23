@@ -234,6 +234,10 @@ where
                         *req.body_mut() = res.as_bytes().to_vec();
                     }
                 },
+
+                Rule::Redirect(host) => {
+                    todo!();
+                }
             }
         }
 
@@ -377,6 +381,10 @@ where
                         *res.body_mut() = new.as_bytes().to_vec();
                     }
                 },
+
+                Rule::Redirect(_) => {
+                    // cannot change host after request was sent
+                }
             }
         }
 

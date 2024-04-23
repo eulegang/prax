@@ -144,6 +144,8 @@ impl Interp {
             globals.set("set", lua.create_function(set)?)?;
             globals.set("sub", lua.create_function(sub)?)?;
 
+            globals.set("redirect", lua.create_function(redirect)?)?;
+
             globals.set("dump", lua.create_userdata(Rule::Dump)?)?;
             globals.set("intercept", lua.create_userdata(Rule::Intercept)?)?;
 
@@ -244,6 +246,10 @@ fn target(lua: &Lua, (hostname,): (String,)) -> mlua::Result<TargetRef> {
 
 fn set(_: &Lua, (attr, value): (Attr, String)) -> mlua::Result<Rule> {
     Ok(Rule::Set(attr, value))
+}
+
+fn redirect(_: &Lua, (host,): (String,)) -> mlua::Result<Rule> {
+    Ok(Rule::Redirect(host))
 }
 
 fn sub<'a>(lua: &'a Lua, (attr, value): (Attr, mlua::Value<'a>)) -> mlua::Result<Rule> {

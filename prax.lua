@@ -12,7 +12,7 @@ function target(name) end
 --- @class TargetRef
 TargetRef = {}
 
---- @param ... Rule Rules to add to target reference
+--- @param ... Rule | RedirectRule Rules to add to target reference
 --- @return TargetRef
 --- add request rules to the current target
 function TargetRef:req(...) end
@@ -28,6 +28,9 @@ function TargetRef:resp(...) end
 --- @class Rule
 --- A rule that can be applied during the processing
 --- of a request or repsonse
+
+--- @class RedirectRule
+--- A rule to redirect a request
 
 --- @param name string
 --- @return Attr
@@ -51,6 +54,12 @@ function set(attr, value) end
 ---
 --- substitute a value for a given Attr
 function sub(attr, transform) end
+
+--- @param host string
+--- @return Rule
+---
+--- redirect requests to a new host
+function redirect(host) end
 
 --- @type Rule
 dump = nil

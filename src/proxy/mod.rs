@@ -40,6 +40,7 @@ pub enum Rule {
     Dump,
     Set(Attr, String),
     Subst(Attr, Subst),
+    Redirect(String),
 }
 
 #[derive(FromLua, Debug, Clone)]
