@@ -95,11 +95,9 @@ target("example.com:3000")
 
     let mut input_req = hyper::Request::new(Vec::new());
     input_req.imprint(input).unwrap();
+    let mut host = String::from("google.com:3000");
 
-    if let Err(e) = config
-        .modify_request("google.com:3000", &mut input_req)
-        .await
-    {
+    if let Err(e) = config.modify_request(&mut host, &mut input_req).await {
         panic!("failed to process request {:?} {}", input_req, e);
     }
 

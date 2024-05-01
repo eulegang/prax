@@ -298,7 +298,7 @@ async fn handle<F, S>(
     filter: Arc<RwLock<Arc<F>>>,
     scribe: &S,
     req: Req<Incoming>,
-    lookup: String,
+    mut lookup: String,
     conn: Connection,
 ) -> Result<Res<Full<Bytes>>>
 where
@@ -309,7 +309,7 @@ where
 
     let mut req = collect_req(req).await?;
 
-    filter.modify_request(&lookup, &mut req).await?;
+    filter.modify_request(&mut lookup, &mut req).await?;
 
     tracing::trace!("sending modified request to scribe");
     let ticket = scribe.report_request(&req).await;
@@ -324,7 +324,7 @@ where
 
     let mut res = conn.send(req.map(|b| b.into())).await?;
 
-    filter.modify_response(&lookup, &mut res).await?;
+    filter.modify_response(&mut lookup, &mut res).await?;
 
     tracing::trace!("sending modified response to scribe");
     scribe.report_response(ticket, &res).await;

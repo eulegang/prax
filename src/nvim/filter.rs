@@ -19,19 +19,23 @@ impl From<NVim> for Intercept {
 }
 
 impl Filter for Intercept {
-    async fn modify_request(&self, hostname: &str, req: &mut Req<Vec<u8>>) -> prax::Result<()> {
+    async fn modify_request(&self, hostname: &mut str, req: &mut Req<Vec<u8>>) -> prax::Result<()> {
         let nvim = self.0.lock().await;
         nvim.modify_request(hostname, req).await
     }
 
-    async fn modify_response(&self, hostname: &str, req: &mut Res<Vec<u8>>) -> prax::Result<()> {
+    async fn modify_response(
+        &self,
+        hostname: &mut str,
+        req: &mut Res<Vec<u8>>,
+    ) -> prax::Result<()> {
         let nvim = self.0.lock().await;
         nvim.modify_response(hostname, req).await
     }
 }
 
 impl Filter for NVim {
-    async fn modify_request(&self, _: &str, req: &mut Req<Vec<u8>>) -> prax::Result<()> {
+    async fn modify_request(&self, _: &mut str, req: &mut Req<Vec<u8>>) -> prax::Result<()> {
         let content = req.to_lines()?;
 
         let notify = {
@@ -64,7 +68,7 @@ impl Filter for NVim {
         Ok(())
     }
 
-    async fn modify_response(&self, _: &str, res: &mut Res<Vec<u8>>) -> prax::Result<()> {
+    async fn modify_response(&self, _: &mut str, res: &mut Res<Vec<u8>>) -> prax::Result<()> {
         let content = res.to_lines()?;
 
         let notify = {

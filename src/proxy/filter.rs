@@ -14,9 +14,13 @@ impl<F> Filter for Config<F>
 where
     F: Filter + Sync,
 {
-    async fn modify_request(&self, hostname: &str, req: &mut crate::Req<Vec<u8>>) -> Result<()> {
+    async fn modify_request(
+        &self,
+        hostname: &mut str,
+        req: &mut crate::Req<Vec<u8>>,
+    ) -> Result<()> {
         tracing::debug!("applying config request rules to {hostname}");
-        let Some(target) = &self.proxy.targets.iter().find(|t| t.hostname == hostname) else {
+        let Some(target) = &self.proxy.targets.iter().find(|t| t.hostname == *hostname) else {
             return Ok(());
         };
 
@@ -245,9 +249,13 @@ where
         Ok(())
     }
 
-    async fn modify_response(&self, hostname: &str, res: &mut crate::Res<Vec<u8>>) -> Result<()> {
+    async fn modify_response(
+        &self,
+        hostname: &mut str,
+        res: &mut crate::Res<Vec<u8>>,
+    ) -> Result<()> {
         tracing::debug!("applying response rules to {hostname}");
-        let Some(target) = self.proxy.targets.iter().find(|t| t.hostname == hostname) else {
+        let Some(target) = self.proxy.targets.iter().find(|t| t.hostname == *hostname) else {
             return Ok(());
         };
 

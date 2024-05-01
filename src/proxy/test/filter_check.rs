@@ -13,11 +13,9 @@ where
 
     let mut input_req = hyper::Request::new(Vec::new());
     input_req.imprint(input).unwrap();
+    let mut host = String::from("example.com:3000");
 
-    if let Err(e) = config
-        .modify_request("example.com:3000", &mut input_req)
-        .await
-    {
+    if let Err(e) = config.modify_request(&mut host, &mut input_req).await {
         panic!("failed to process request {:?} {}", input_req, e);
     }
 
@@ -44,11 +42,9 @@ where
 
     let mut input_res = hyper::Response::new(Vec::new());
     input_res.imprint(input).unwrap();
+    let mut host = String::from("example.com:3000");
 
-    if let Err(e) = config
-        .modify_response("example.com:3000", &mut input_res)
-        .await
-    {
+    if let Err(e) = config.modify_response(&mut host, &mut input_res).await {
         panic!("failed to process request {:?} {}", input_res, e);
     }
 

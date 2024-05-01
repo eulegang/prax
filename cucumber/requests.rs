@@ -83,9 +83,10 @@ async fn handled(world: &mut ReqWorld, step: &Step) {
     let doc = step.docstring().expect("nonempty handler program");
     let config_text = String::leak(doc.clone());
     let config = Config::test(config_text, ()).await.unwrap();
+    let mut host = String::from("example.com:3000");
 
     let _ = config
-        .modify_request("example.com:3000", &mut world.subject)
+        .modify_request(&mut host, &mut world.subject)
         .await
         .unwrap();
 }
@@ -96,9 +97,10 @@ async fn filter(world: &mut ReqWorld, config: String) {
     pre.push_str(&config);
     let config_text: &'static str = String::leak(pre); // we don't care about leaks in tests
     let config = Config::test(&config_text, ()).await.unwrap();
+    let mut host = String::from("example.com:3000");
 
     let _ = config
-        .modify_request("example.com:3000", &mut world.subject)
+        .modify_request(&mut host, &mut world.subject)
         .await
         .unwrap();
 }
