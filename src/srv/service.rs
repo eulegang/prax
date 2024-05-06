@@ -292,6 +292,16 @@ impl Connection {
             }
         }
     }
+
+    fn inject(&mut self, lookup: &str) {
+        match self {
+            Connection::Tunnel(_) => (),
+            Connection::Lookup(internal) => {
+                internal.clear();
+                internal.push_str(lookup);
+            }
+        }
+    }
 }
 
 async fn handle<F, S>(
@@ -299,7 +309,7 @@ async fn handle<F, S>(
     scribe: &S,
     req: Req<Incoming>,
     mut lookup: String,
-    conn: Connection,
+    mut conn: Connection,
 ) -> Result<Res<Full<Bytes>>>
 where
     F: Filter + Send + Sync + 'static,
@@ -310,6 +320,7 @@ where
     let mut req = collect_req(req).await?;
 
     filter.modify_request(&mut lookup, &mut req).await?;
+    conn.inject(&lookup);
 
     tracing::trace!("sending modified request to scribe");
     let ticket = scribe.report_request(&req).await;

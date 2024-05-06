@@ -240,7 +240,8 @@ where
                 },
 
                 Rule::Redirect(host) => {
-                    todo!();
+                    tracing::debug!(from = %hostname, to = %host);
+                    *hostname = host.to_string()
                 }
             }
         }
