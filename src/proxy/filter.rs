@@ -16,7 +16,7 @@ where
 {
     async fn modify_request(
         &self,
-        hostname: &mut str,
+        hostname: &mut String,
         req: &mut crate::Req<Vec<u8>>,
     ) -> Result<()> {
         tracing::debug!("applying config request rules to {hostname}");
@@ -251,7 +251,7 @@ where
 
     async fn modify_response(
         &self,
-        hostname: &mut str,
+        hostname: &mut String,
         res: &mut crate::Res<Vec<u8>>,
     ) -> Result<()> {
         tracing::debug!("applying response rules to {hostname}");

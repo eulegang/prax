@@ -6,23 +6,31 @@ use super::{Req, Res};
 pub trait Filter {
     fn modify_request(
         &self,
-        hostname: &mut str,
+        hostname: &mut String,
         req: &mut Req<Vec<u8>>,
     ) -> impl Future<Output = crate::Result<()>> + Send;
 
     fn modify_response(
         &self,
-        hostname: &mut str,
+        hostname: &mut String,
         req: &mut Res<Vec<u8>>,
     ) -> impl Future<Output = crate::Result<()>> + Send;
 }
 
 impl Filter for () {
-    async fn modify_request(&self, _: &mut str, _: &mut super::Req<Vec<u8>>) -> crate::Result<()> {
+    async fn modify_request(
+        &self,
+        _: &mut String,
+        _: &mut super::Req<Vec<u8>>,
+    ) -> crate::Result<()> {
         Ok(())
     }
 
-    async fn modify_response(&self, _: &mut str, _: &mut super::Res<Vec<u8>>) -> crate::Result<()> {
+    async fn modify_response(
+        &self,
+        _: &mut String,
+        _: &mut super::Res<Vec<u8>>,
+    ) -> crate::Result<()> {
         Ok(())
     }
 }

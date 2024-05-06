@@ -14,7 +14,7 @@ pub struct Trace {
 impl Filter for Trace {
     async fn modify_request(
         &self,
-        hostname: &mut str,
+        hostname: &mut String,
         req: &mut crate::Req<Vec<u8>>,
     ) -> crate::Result<()> {
         let hostname = hostname.to_string();
@@ -26,7 +26,7 @@ impl Filter for Trace {
 
     async fn modify_response(
         &self,
-        hostname: &mut str,
+        hostname: &mut String,
         res: &mut crate::Res<Vec<u8>>,
     ) -> crate::Result<()> {
         let hostname = hostname.to_string();
